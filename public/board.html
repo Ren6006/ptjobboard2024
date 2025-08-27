@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Board</title>
+    <style>
+      /* Optional styling to arrange the notes */
+      #requests-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+      }
+
+      /* Basic styling for the post-it notes */
+      .post-it {
+        width: 200px; /* Adjust this width as needed */
+        background-color: #fdfd96; /* A "post-it" yellow color */
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+        font-family: Arial, sans-serif;
+      }
+
+      .post-it h3 {
+        margin: 0 0 5px 0;
+        font-size: 18px;
+        font-weight: bold;
+      }
+
+      .post-it p {
+        margin: 5px 0;
+        font-size: 14px;
+      }
+
+      .post-it strong {
+        font-weight: bold;
+      }
+    /* Simple styling to place the button at the top right */
+    .my-account-btn {
+        position: absolute;
+        top: 20px; 
+        right: 20px; 
+        background-color: #007BFF; 
+        color: #FFFFFF; 
+        padding: 10px 20px; 
+        text-decoration: none;
+        border-radius: 4px;
+        font-weight: bold;
+        font-family: Arial, sans-serif;
+    }
+
+    .my-account-btn:hover {
+        background-color: #0056b3;
+    }
+    </style>
+</head>
+<body>
+    <div id="user-info"></div>
+    <div id="requests-container"></div>
+
+    <!-- Include Firebase App (the core Firebase SDK) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <!-- Include Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+    <script>
+      // Your Firebase configuration (replace with your own keys if different)
+      const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "ptjobboard2024.firebaseapp.com",
+        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
+        projectId: "ptjobboard2024",
+        storageBucket: "ptjobboard2024.firebasestorage.app",
+        messagingSenderId: "401143229772",
+        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
+        measurementId: "G-PF9F78SKZV"
+      };
+
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+
+      // Parse the email from the URL query parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      const email = urlParams.get('email');
+
+      const userInfoDiv = document.getElementById('user-info');
+      const requestsContainer = document.getElementById('requests-container');
+
+      if (email) {
+          userInfoDiv.textContent = `Welcome, ${email}!`;
+
+          // Fetch documents from the "Requests" collection
+          db.collection("Requests").get().then((querySnapshot) => {
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+
+      // Create a post-it note element
+      const note = document.createElement('div');
+      note.classList.add('post-it');
+
+      // Construct the inner HTML with document data
+      note.innerHTML = `
+        <h3>${data.name || "No Name"}</h3>
+        <p><strong>Email:</strong> ${data.email || "N/A"}</p>
+        <p><strong>Grade:</strong> ${data.grade || "N/A"}</p>
+        <p><strong>Subject:</strong> ${data.subject || "N/A"}</p>
+        <p><strong>Class:</strong> ${data.class || "N/A"}</p>
+        <p><strong>Topic:</strong> ${data.topic || "N/A"}</p>
+        <p><strong>Date:</strong> ${data.date || "N/A"}</p>
+        <p><strong>Block:</strong> ${data.block || "N/A"}</p>
+        <p><strong>Location:</strong> ${data.location || "N/A"}</p>
+        <p><strong>Info:</strong> ${data.info || "N/A"}</p>
+      `;
+
+      // Create the "Accept Request" button
+      const acceptButton = document.createElement('button');
+      acceptButton.textContent = 'Accept Request';
+
+      // Create a container for confirmation buttons (check and x)
+      const confirmationContainer = document.createElement('div');
+      confirmationContainer.style.display = 'none'; // hidden by default
+
+      // Create the check button
+      const confirmButton = document.createElement('button');
+      confirmButton.textContent = '✓'; // or use any icon/text you like
+      confirmButton.style.marginRight = '10px';
+
+      // Create the cancel (x) button
+      const cancelButton = document.createElement('button');
+      cancelButton.textContent = 'x';
+
+      // Add them to the container
+      confirmationContainer.appendChild(confirmButton);
+      confirmationContainer.appendChild(cancelButton);
+
+      // Handle "Accept Request" click
+      acceptButton.addEventListener('click', () => {
+        // Hide the accept button
+        acceptButton.style.display = 'none';
+
+        // Show the confirmation buttons
+        confirmationContainer.style.display = 'inline-block';
+      });
+
+      // Handle the "✓" click
+      confirmButton.addEventListener('click', () => {
+        db.collection("Sessions")
+          .add({
+            ...data,
+            "tutor email": email // The tutor’s email from the URL parameter
+          })
+          .then(() => {
+            db.collection("Requests").doc(doc.id).delete()
+              .then(() => {
+                console.log("Document successfully deleted from Requests.");
+                // Remove the note from the DOM
+                note.remove();
+              })
+              .catch((error) => {
+                console.error("Error deleting document from Requests:", error);
+              });
+          })
+          .catch((error) => {
+            console.error("Error adding document to Sessions:", error);
+          });
+      });
+
+      // Handle the "x" click
+      cancelButton.addEventListener('click', () => {
+        // Hide confirmation buttons
+        confirmationContainer.style.display = 'none';
+        // Show the original accept button again
+        acceptButton.style.display = 'inline-block';
+      });
+
+      // Append the accept button to the note
+      note.appendChild(acceptButton);
+
+      // Append the confirmation container after the accept button
+      note.appendChild(confirmationContainer);
+
+      // Finally, append the note to the container
+      requestsContainer.appendChild(note);
+            });
+          }).catch((error) => {
+            console.error("Error getting documents: ", error);
+          });
+      } else {
+          userInfoDiv.textContent = 'No email provided.';
+      }
+    </script>
+    <script>
+        // Example: Suppose you have the user's email from your authentication process
+        const userEmail = email;
+        
+        // Construct the URL with the email as a query parameter
+        const accountUrl = "account.html?email=" + encodeURIComponent(userEmail);
+    
+        // Insert the button into the DOM with the correct URL
+        document.write('<a href="' + accountUrl + '" class="my-account-btn">MY ACCOUNT</a>');
+    </script>
+</body>
+</html>

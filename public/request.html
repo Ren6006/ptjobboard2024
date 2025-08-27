@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic Form</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    /* Title styling */
+    h1 {
+            font-size: 3rem;
+            color: #333;
+            margin: 0px 0 10px; /* Pushes the title to the top */
+            text-align: center;
+        }
+    body {
+      font-family: Arial, sans-serif;
+      flex-direction: column;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f4f4f9;
+    }
+    .form-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #ffffff;
+      margin: 0px 30px 30px;
+      padding: 40px 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .form-container form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    input[type="text"], button {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      width: 500px;
+    }
+    button {
+      background-color: #007BFF;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .new-field {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .new-field input[type="text"] {
+      width: 100%;
+    }
+    select {
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    width: 300px;
+    box-sizing: border-box;
+    appearance: none;
+    background-color: #f6f4ec;
+    color: #000;
+    }
+
+    select:focus {
+    outline: none;
+    border-color: #007BFF;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    }
+
+    button {
+    width: 100%; /* Match input fields' width */
+    font-family: Arial, sans-serif; /* Match input fields' font */
+    font-size: 16px; /* Match input fields' font size */
+    padding: 10px; /* Match input fields' padding */
+    border: 1px solid #ccc; /* Match input fields' border */
+    border-radius: 4px; /* Match input fields' border radius */
+    cursor: pointer; /* Pointer cursor for buttons */
+    box-sizing: border-box; /* Prevents padding from affecting width */
+    margin-top: 10px; /* Space above the button */
+    }
+
+    button:hover {
+    background-color: #4254e1; /* Slight hover effect */
+    }
+
+    button:active {
+    background-color: #d0d0d0; /* Slightly darker on click */
+    }
+
+    button:disabled {
+    background-color: #f0f0f0; /* Disabled state color */
+    cursor: not-allowed; /* Prevent pointer cursor */
+    opacity: 0.6; /* Make it look disabled */
+    }
+
+  </style>
+</head>
+<body>
+  <!-- Title at the top of the page -->
+  <h1>Submit a Tutoring Request!</h1>
+
+
+  <div class="form-container">
+    
+    <form id="dynamicForm">
+        <input type="text" placeholder="Name (First and Last)" id="name"/>
+        <input type="text" placeholder="Email" id="email"/>
+        <select id="grade">
+            <option selected value="" disabled>↓ Select a grade</option>
+            <option value=10>10th Grade</option>
+            <option value=11>11th Grade</option>
+            <option value=12>12th Grade</option>
+        </select>
+        <select id="subject">
+            <option selected value="" disabled>↓ Select a subject</option>
+            <option>Math</option>
+            <option>Science</option>
+            <option>English</option>
+            <option>History</option>
+            <option>World Language</option>
+            <option>Computer Science</option>
+            <option>Other</option>
+        </select>
+        <select id="class">
+            <option value="" disabled selected>↓ Select a class (Pick a subject first!)</option>
+        </select>
+        <input id="topic" type="text" placeholder="Topic (e.g. Factoring, Precipitation, History Research Project, etc.)" />
+        <input id="date" type="text" placeholder="Date in MM/DD/YYYY"/>
+        <input id="block" type="text" placeholder="Block (i.e. Block 6, Block 1, Conference Time, DS, Lunch, etc.)"/>
+        <input id="location" type="text" placeholder='Location (Leave blank for Learning Center, "Virtual" for Zoom)'/>
+        <input id="info" type="text" placeholder="Additional Information"/>
+        <button>Submit</button>
+
+    </form>
+    </div>
+  </div>
+
+  <!-- Add Firebase SDK scripts before your closing </body> tag -->
+  <!-- Include Firebase App (the core Firebase SDK) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <!-- Include Firebase Firestore -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <script>
+
+
+    const firebaseConfig = {
+
+        apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
+        authDomain: "ptjobboard2024.firebaseapp.com",
+        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
+        projectId: "ptjobboard2024",
+        storageBucket: "ptjobboard2024.firebasestorage.app",
+        messagingSenderId: "401143229772",
+        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
+        measurementId: "G-PF9F78SKZV"
+
+    };
+
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    var db = firebase.firestore();
+    const subjectChoice = document.getElementById("subject");
+    const topicChoice = document.getElementById("class");
+
+    const options = {
+      math: ["Geometry", "Advanced Geometry", "Honors Geometry", "Algebra II", "Advanced Algebra II", "Honors Algebra II", "Precalculus", "Advanced Precalculus", "Honors Precalculus", "AP Calculus AB", "AP Calculus BC", "Linear Algebra", "Other"],
+      science: ["Chemistry", "Honors Chemistry", "AP Chemistry", "Physics I", "Honors Physics I", "AP Physics C: Mechanics", "AP Physics C: Electricity & Magnetism", "AP Environmental Sciences", "Other"],
+      history: ["Rise of The Modern World", "ROTW Art History", "Thematic US History", "Honors US History", "Other"],
+      english: ["English II", "English III", "Honors English III", "Other"],
+      "world language": ["Spanish II", "Honors Spanish II", "Spanish III", "Honors Spanish III", "Spanish IV", "AP Spanish", "French II", "Honors French II", "French III", "Honors French III", "French IV", "Latin II", "Latin III", "Honors Latin III", "Latin IV", "AP Latin", "Chinese II", "Chinese III", "Honors Chinese III", "Chinese IV", "Other"],
+      "computer science": ["Advanced Computer Science", "Design and Data Structures"],
+      other: ["Other"],
+    };
+
+
+    if(subjectChoice.value){
+        // Clear previous options in the second select
+        topicChoice.innerHTML = '<option value="" disabled selected>↓ Select a class</option>';
+
+        // Populate second select with relevant options
+        options[subjectChoice.value.toLowerCase()].forEach((topic) => {
+            const optionElement = document.createElement("option");
+            optionElement.value = topic;
+            optionElement.textContent = topic;
+            topicChoice.appendChild(optionElement);
+    });}
+    
+
+    subjectChoice.addEventListener("change", () => {
+      const selectedSubject = subjectChoice.value;
+
+      if (selectedSubject) {
+        // Clear previous options in the second select
+        topicChoice.innerHTML = '<option value="" disabled selected>↓ Select a class</option>';
+
+        // Populate second select with relevant options
+        options[selectedSubject.toLowerCase()].forEach((topic) => {
+          const optionElement = document.createElement("option");
+          optionElement.value = topic;
+          optionElement.textContent = topic;
+          topicChoice.appendChild(optionElement);
+        });
+
+      } 
+    });
+
+    // Add an event listener to the form submission
+    document.getElementById("dynamicForm").addEventListener("submit", function(event) {
+        event.preventDefault(); // Prevent default form submission
+
+        // Get form field values
+        // Get form field values
+        const name = document.getElementById("name").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const grade = document.getElementById("grade").value;
+        const subject = document.getElementById("subject").value;
+        const classSelection = document.getElementById("class").value;
+        const topic = document.getElementById("topic").value.trim();
+        const date = document.getElementById("date").value.trim();
+        const block = document.getElementById("block").value.trim();
+        let location = document.getElementById("location").value.trim();
+        if (!location){
+            location = "Learning Center";
+        }
+        const info = document.getElementById("info").value.trim();
+
+        // Initialize an array to collect error messages
+        let errors = [];
+
+        // 1) Check if the email ends in "@hwemail.com"
+        if (!email.endsWith("@hwemail.com")) {
+        errors.push("Email must end with '@hwemail.com'.");
+        }
+
+        // 2) Check if grade, subject, and class have been selected
+        if (!grade) {
+        errors.push("Please select a grade.");
+        }
+        if (!subject) {
+        errors.push("Please select a subject.");
+        }
+        if (!classSelection) {
+        errors.push("Please select a class.");
+        }
+
+        // 3) Check if a date in the proper format has been entered
+        const datePattern = /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/\d{4}$/; // MM/DD/YYYY
+        
+        if (!datePattern.test(date)) {
+        errors.push("Date must be in MM/DD/YYYY format.");
+        }
+
+        // If there are errors, display them and prevent submission
+        if (errors.length > 0) {
+        alert(errors.join("\n"));
+        } else {
+            db.collection("Requests").add({
+          name: name,
+          email: email,
+          grade: grade,
+          subject: subject,
+          class: classSelection,
+          topic: topic,
+          date: date,
+          block: block,
+          location: location,
+          info: info,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        })
+        .then(function(docRef) {
+          alert("Request submitted successfully!");
+        })
+        .catch(function(error) {
+          console.error("Error adding document: ", error);
+          alert("An error occurred while submitting your request. Please try again.");
+        });
+        }
+    });
+  </script>
+
+</body>
+</html>
