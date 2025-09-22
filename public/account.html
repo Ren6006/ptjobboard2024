@@ -252,7 +252,7 @@
       checkboxes.forEach(function (cb) {
         var day = cb.dataset.day;
         var block = cb.dataset.block;
-        var key = 'D' + day + '_' + block;
+        var key = day + '_' + block;
         if (cb.checked) { map[key] = true; }
       });
       return map;
