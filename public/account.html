@@ -1,235 +1,278 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Information</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-      }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Info</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f9; margin: 0; }
+    .container { max-width: 1000px; margin: 60px auto; background: #fff; padding: 24px; border-radius: 10px; box-shadow: 0 6px 14px rgba(0,0,0,0.06); }
+    .container, .container * { box-sizing: border-box; }
+    h1 { margin: 0 0 12px; }
+    p { margin: 0 0 16px; color: #555; }
+    .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; }
+    label { font-weight: bold; margin-top: 8px; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+    /* Do not stretch checkboxes */
+    .block-item input[type="checkbox"] { width: auto; height: auto; padding: 0; margin: 0; flex: 0 0 auto; }
+    .block-item span { flex: 1 1 auto; }
+    .section { margin-top: 24px; }
+    /* Old blocks grid kept for reference, no longer used */
+    .blocks { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; }
+    .block-item { border: 1px solid #ddd; border-radius: 8px; padding: 8px; display: flex; align-items: center; gap: 8px; background: #fafafa; max-width: 100%; }
+    .actions { margin-top: 24px; display: flex; gap: 12px; }
+    button { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; }
+    .primary { background: #007BFF; color: #fff; }
+    .secondary { background: #e5e7eb; color: #111827; }
 
-      /* Account info container styling */
-      #account-info {
-        max-width: 600px;
-        margin: 50px auto;
-        padding: 20px;
-        border: 1px solid #ccc;
-        border-radius: 8px;
-        background-color: #fafafa;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
-      }
+    /* Availability columns (6 collapsible) */
+    .columns { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+    .columns > details.day-card { min-width: 0; width: auto; overflow: hidden; flex: 0 1 calc((100% - 5 * 12px) / 6); }
+    @media (max-width: 1100px) { .columns > details.day-card { flex-basis: calc((100% - 2 * 12px) / 3); } }
+    @media (max-width: 700px) { .columns > details.day-card { flex-basis: calc((100% - 1 * 12px) / 2); } }
+    details.day-card { border: 1px solid #e5e7eb; border-radius: 10px; background: #fafafa; }
+    details.day-card > summary { list-style: none; cursor: pointer; padding: 6px 10px; font-weight: bold; background: #f0f4ff; color: #1a57d6; border-radius: 10px 10px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    details.day-card[open] > summary { border-bottom: 1px solid #e5e7eb; }
+    .day-content { padding: 8px; display: grid; gap: 6px; grid-template-columns: 1fr; max-width: 100%; }
+    .day-content .block-item { width: 100%; max-width: 100%; justify-content: flex-start; padding: 6px 8px; }
+    .day-content .block-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-      #account-info h1 {
-        margin-top: 0;
-        text-align: center;
-      }
-
-      #account-info p {
-        margin: 10px 0;
-      }
-
-      #classes-list {
-        list-style-type: disc;
-        margin: 10px 0 0 20px;
-        padding: 0;
-      }
-
-      /* "MY ACCOUNT" button styling at top right */
-      .my-account-btn {
-        position: absolute;
-        top: 20px; 
-        right: 20px; 
-        background-color: #007BFF; 
-        color: #FFFFFF; 
-        padding: 10px 20px; 
-        text-decoration: none;
-        border-radius: 4px;
-        font-weight: bold;
-        font-family: Arial, sans-serif;
-      }
-      .my-account-btn:hover {
-        background-color: #0056b3;
-      }
-
-      /* ===== Copied from board.html for requests styling ===== */
-      #upcoming-sessions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 20px;
-        margin: 50px auto;
-        max-width: 800px;
-      }
-
-      .post-it {
-        width: 200px; /* Adjust as needed */
-        background-color: #fdfd96; /* "Post-it" style yellow */
-        padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 8px;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
-        font-family: Arial, sans-serif;
-      }
-
-      .post-it h3 {
-        margin: 0 0 5px 0;
-        font-size: 18px;
-        font-weight: bold;
-      }
-
-      .post-it p {
-        margin: 5px 0;
-        font-size: 14px;
-      }
-
-      .post-it strong {
-        font-weight: bold;
-      }
-      /* ========================================== */
-    </style>
+    /* Subject/class picker */
+    .subjects { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; }
+    @media (max-width: 900px) { .subjects { grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
+    @media (max-width: 600px) { .subjects { grid-template-columns: 1fr; } }
+    details.subject-card { border: 1px solid #e5e7eb; border-radius: 10px; background: #fafafa; }
+    details.subject-card > summary { list-style: none; cursor: pointer; padding: 10px 12px; font-weight: bold; background: #f9fafb; border-radius: 10px 10px 0 0; }
+    .subject-content { padding: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 9999px; background: #ffffff; color: #111827; cursor: pointer; user-select: none; font-size: 13px; }
+    .chip.selected { background: #1a57d6; color: #fff; border-color: #1a57d6; }
+    .muted { color: #6b7280; font-size: 12px; }
+    .hidden { display: none; }
+  </style>
 </head>
 <body>
-    <div id="account-info">
-        <h1>Account Information</h1>
-        <p id="account-name"><strong>Name:</strong> Loading...</p>
-        <p id="account-email"><strong>Email:</strong> Loading...</p>
-        <p id="account-phone"><strong>Phone Number:</strong> Loading...</p>
-        <p><strong>Available Classes:</strong></p>
-        <ul id="classes-list">
-            <li>Loading classes...</li>
-        </ul>
+  <div class="container">
+    <h1>User Info</h1>
+    <p>Update your grade, classes, and availability. This helps tutors match with your requests.</p>
+
+    <div class="section grid">
+      <label for="name">Full name</label>
+      <input id="name" type="text" placeholder="First Last" />
+
+      <label for="grade">Grade</label>
+      <select id="grade">
+        <option value="">Select grade</option>
+        <option value="10">10</option>
+        <option value="11">11</option>
+        <option value="12">12</option>
+      </select>
     </div>
 
-    <!-- “Upcoming Sessions” will now serve as the container for the post-it requests -->
-    <div id="upcoming-sessions">
-      <!-- Requests will be appended here as .post-it notes -->
+    <div class="section">
+      <h3>Classes</h3>
+      <p class="muted">Expand a subject and click classes to select. Click again to unselect.</p>
+      <div id="subjectsRoot" class="subjects"></div>
     </div>
 
-    <!-- Include Firebase App (the core Firebase SDK) -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-    <!-- Include Firebase Firestore -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
-    <script>
-      // Your Firebase configuration
-      const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "ptjobboard2024.firebaseapp.com",
-        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-        projectId: "ptjobboard2024",
-        storageBucket: "ptjobboard2024.appspot.com",
-        messagingSenderId: "401143229772",
-        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-        measurementId: "G-PF9F78SKZV"
-      };
+    <div class="section">
+      <h3>Availability (Day 1–6 × Blocks)</h3>
+      <p>Toggle the blocks you are generally available for each cycle day.</p>
+      <div id="availability" class="columns"></div>
+    </div>
 
-      // Initialize Firebase
-      firebase.initializeApp(firebaseConfig);
-      const db = firebase.firestore();
+    <div class="actions">
+      <button id="saveBtn" class="primary">Save</button>
+      <button id="cancelBtn" class="secondary">Cancel</button>
+    </div>
+  </div>
 
-      // Parse the email from the URL query parameter
-      const urlParams = new URLSearchParams(window.location.search);
-      const email = urlParams.get('email');
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
+      authDomain: "ptjobboard2024.firebaseapp.com",
+      databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
+      projectId: "ptjobboard2024",
+      storageBucket: "ptjobboard2024.firebasestorage.app",
+      messagingSenderId: "401143229772",
+      appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
+      measurementId: "G-PF9F78SKZV"
+    };
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
 
-      // References to DOM elements
-      const nameElem = document.getElementById('account-name');
-      const emailElem = document.getElementById('account-email');
-      const phoneElem = document.getElementById('account-phone');
-      const classesListElem = document.getElementById('classes-list');
-      const upcomingSessionsDiv = document.getElementById('upcoming-sessions');
+    const availabilityRoot = document.getElementById('availability');
+    const subjectsRoot = document.getElementById('subjectsRoot');
+    const dayCount = 6;
+    const blocksCatalog = [
+      { id: 'B1', label: 'Block 1' },
+      { id: 'B2', label: 'Block 2' },
+      { id: 'B3', label: 'Block 3' },
+      { id: 'B4', label: 'Block 4' },
+      { id: 'B5', label: 'Block 5' },
+      { id: 'B6', label: 'Block 6' },
+      { id: 'B7', label: 'Block 7' },
+      { id: 'LUNCH', label: 'Lunch' },
+      { id: 'DS', label: 'DS/Conference' }
+    ];
 
-      // If no email is provided, indicate so
-      if (!email) {
-        nameElem.innerHTML = "<strong>Name:</strong> N/A";
-        emailElem.innerHTML = "<strong>Email:</strong> No email provided.";
-        phoneElem.innerHTML = "<strong>Phone Number:</strong> N/A";
-        classesListElem.innerHTML = "<li>No classes available</li>";
-      } else {
-        // Query the Accounts collection for this user
-        db.collection("Accounts")
-          .where("Email", "==", email)
-          .limit(1)
-          .get()
-          .then((querySnapshot) => {
-            if (querySnapshot.empty) {
-              // No account found
-              nameElem.innerHTML = "<strong>Name:</strong> Account not found";
-              emailElem.innerHTML = `<strong>Email:</strong> ${email}`;
-              phoneElem.innerHTML = "<strong>Phone Number:</strong> N/A";
-              classesListElem.innerHTML = "<li>No classes found</li>";
-            } else {
-              querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                const name = data.Name || "N/A";
-                const phone = data["Phone Number"] || "N/A";
-                const classes = data["Available Classes"] || [];
+    const subjectsCatalog = {
+      'Math': [
+        'Geometry','Advanced Geometry','Honors Geometry','Algebra II','Advanced Algebra II','Honors Algebra II','Precalculus','Advanced Precalculus','Honors Precalculus','AP Calculus AB','AP Calculus BC','Linear Algebra','Other'
+      ],
+      'Science': [
+        'Chemistry','Honors Chemistry','AP Chemistry','Physics I','Honors Physics I','AP Physics C: Mechanics','AP Physics C: Electricity & Magnetism','AP Environmental Sciences','Other'
+      ],
+      'English': [
+        'English II','English III','Honors English III','Other'
+      ],
+      'History': [
+        'Rise of The Modern World','ROTW Art History','Thematic US History','Honors US History','Other'
+      ],
+      'World Language': [
+        'Spanish II','Honors Spanish II','Spanish III','Honors Spanish III','Spanish IV','AP Spanish','French II','Honors French II','French III','Honors French III','French IV','Latin II','Latin III','Honors Latin III','Latin IV','AP Latin','Chinese II','Chinese III','Honors Chinese III','Chinese IV','Other'
+      ],
+      'Computer Science': [
+        'Advanced Computer Science','Design and Data Structures'
+      ]
+    };
 
-                nameElem.innerHTML = `<strong>Name:</strong> ${name}`;
-                emailElem.innerHTML = `<strong>Email:</strong> ${data.Email || email}`;
-                phoneElem.innerHTML = `<strong>Phone Number:</strong> ${phone}`;
-
-                if (classes.length > 0) {
-                  classesListElem.innerHTML = ""; 
-                  classes.forEach((classItem) => {
-                    const li = document.createElement('li');
-                    li.textContent = classItem;
-                    classesListElem.appendChild(li);
-                  });
-                } else {
-                  classesListElem.innerHTML = "<li>No classes available</li>";
-                }
-              });
-            }
-          })
-          .catch((error) => {
-            console.error("Error getting account document:", error);
-            nameElem.innerHTML = "<strong>Name:</strong> Error loading account";
-            emailElem.innerHTML = `<strong>Email:</strong> ${email}`;
-            phoneElem.innerHTML = "<strong>Phone Number:</strong> Error";
-            classesListElem.innerHTML = "<li>Error loading classes</li>";
-          });
-      }
-
-      // ===== Fetch and display Requests just like in board.html =====
-      // This shows *all* requests. If you only want requests *for this user*, 
-      // use .where("email","==", email) or something similar in your query.
-      db.collection("Sessions")
-        .where("tutor email", "==", email)
-        .get()
-        .then((querySnapshot) => {
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-
-            // Create a post-it note element
-            const note = document.createElement('div');
-            note.classList.add('post-it');
-
-            // Construct the inner HTML with document data
-            note.innerHTML = `
-              <h3>${data.name || "No Name"}</h3>
-              <p><strong>Email:</strong> ${data.email || "N/A"}</p>
-              <p><strong>Grade:</strong> ${data.grade || "N/A"}</p>
-              <p><strong>Subject:</strong> ${data.subject || "N/A"}</p>
-              <p><strong>Class:</strong> ${data.class || "N/A"}</p>
-              <p><strong>Topic:</strong> ${data.topic || "N/A"}</p>
-              <p><strong>Date:</strong> ${data.date || "N/A"}</p>
-              <p><strong>Block:</strong> ${data.block || "N/A"}</p>
-              <p><strong>Location:</strong> ${data.location || "N/A"}</p>
-              <p><strong>Info:</strong> ${data.info || "N/A"}</p>
-            `;
-
-            // Append the note to the “Upcoming Sessions” container
-            upcomingSessionsDiv.appendChild(note);
-          });
-        })
-        .catch((error) => {
-          console.error("Error getting documents: ", error);
+    function buildAvailabilityGrid(current) {
+      availabilityRoot.innerHTML = '';
+      for (var day = 1; day <= dayCount; day++) {
+        var details = document.createElement('details');
+        details.className = 'day-card';
+        var summary = document.createElement('summary');
+        summary.textContent = 'Day ' + day;
+        var content = document.createElement('div');
+        content.className = 'day-content';
+        blocksCatalog.forEach(function (blk) {
+          var key = 'D' + day + '_' + blk.id;
+          var wrapper = document.createElement('label');
+          wrapper.className = 'block-item';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = !!(current && current[key]);
+          cb.dataset.day = String(day);
+          cb.dataset.block = blk.id;
+          var span = document.createElement('span');
+          span.textContent = blk.label;
+          wrapper.appendChild(cb);
+          wrapper.appendChild(span);
+          content.appendChild(wrapper);
         });
-    </script>
-    <script>
-        // Insert the "BOARD" button at the top right linking to board.html
-        const userEmail = email;
-        const boardUrl = "board.html?email=" + encodeURIComponent(userEmail);
-        document.write('<a href="' + boardUrl + '" class="my-account-btn">BOARD</a>');
-    </script>
+        details.appendChild(summary);
+        details.appendChild(content);
+        availabilityRoot.appendChild(details);
+      }
+    }
+    function buildSubjects(preselectedArr) {
+      if (!subjectsRoot) return;
+      var preselected = new Set(Array.isArray(preselectedArr) ? preselectedArr : []);
+      subjectsRoot.innerHTML = '';
+      Object.keys(subjectsCatalog).forEach(function (subject) {
+        var details = document.createElement('details');
+        details.className = 'subject-card';
+        var summary = document.createElement('summary');
+        summary.textContent = subject;
+        var content = document.createElement('div');
+        content.className = 'subject-content';
+        subjectsCatalog[subject].forEach(function (cls) {
+          var chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'chip' + (preselected.has(cls) ? ' selected' : '');
+          chip.textContent = cls;
+          chip.dataset.className = cls;
+          chip.dataset.subject = subject;
+          chip.addEventListener('click', function () {
+            chip.classList.toggle('selected');
+          });
+          content.appendChild(chip);
+        });
+        details.appendChild(summary);
+        details.appendChild(content);
+        subjectsRoot.appendChild(details);
+      });
+    }
+
+    function collectSelectedClasses() {
+      if (!subjectsRoot) return [];
+      var chips = subjectsRoot.querySelectorAll('.chip.selected');
+      var out = [];
+      chips.forEach(function (c) { out.push(c.dataset.className); });
+      return out;
+    }
+
+    function collectAvailability() {
+      var checkboxes = availabilityRoot.querySelectorAll('input[type="checkbox"]');
+      var map = {};
+      checkboxes.forEach(function (cb) {
+        var day = cb.dataset.day;
+        var block = cb.dataset.block;
+        var key = 'D' + day + '_' + block;
+        if (cb.checked) { map[key] = true; }
+      });
+      return map;
+    }
+
+    auth.onAuthStateChanged(async function (user) {
+      if (!user) {
+        window.location.href = 'signup.html';
+        return;
+      }
+      // Prefill profile
+      var nameEl = document.getElementById('name');
+      var gradeEl = document.getElementById('grade');
+      try {
+        var snap = await db.collection('users').doc(user.uid).get();
+        var data = snap.exists ? snap.data() : {};
+        nameEl.value = data.name || user.displayName || '';
+        gradeEl.value = data.grade || '';
+        // Migrate any comma-separated classes_text into standardized classes once
+        var standardizedClasses = Array.isArray(data.classes) ? data.classes : [];
+        if ((!standardizedClasses || standardizedClasses.length === 0) && data.classes_text) {
+          standardizedClasses = data.classes_text.split(',').map(function(s){return s.trim();}).filter(Boolean);
+        }
+        buildSubjects(standardizedClasses);
+        buildAvailabilityGrid(data.availability || {});
+      } catch (e) {
+        buildSubjects([]);
+        buildAvailabilityGrid({});
+      }
+    });
+
+    document.getElementById('saveBtn').addEventListener('click', async function () {
+      var user = auth.currentUser;
+      if (!user) { window.location.href = 'signup.html'; return; }
+      var name = document.getElementById('name').value.trim();
+      var grade = document.getElementById('grade').value;
+      var selectedStandardClasses = collectSelectedClasses();
+      var classes = selectedStandardClasses.slice();
+      var availability = collectAvailability();
+      try {
+        await db.collection('users').doc(user.uid).set({
+          name: name || null,
+          grade: grade || null,
+          classes: classes,
+          availability: availability
+        }, { merge: true });
+        // Remove legacy classes_text if present
+        await db.collection('users').doc(user.uid).update({ classes_text: firebase.firestore.FieldValue.delete() }).catch(function(){});
+        alert('Saved');
+      } catch (e) {
+        alert('Save failed');
+      }
+    });
+
+    document.getElementById('cancelBtn').addEventListener('click', function () {
+      window.location.href = 'index.html';
+    });
+  </script>
+
+  <script src="common-auth.js"></script>
 </body>
 </html>
