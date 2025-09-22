@@ -71,7 +71,7 @@ const blocksCatalog = {
       if (!snap) return;
   
       // wait 5 minutes (300,000 ms)
-      await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000));
+      await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 200));
   
       // refetch to confirm still scheduled
       const freshSnap = await snap.ref.get();
