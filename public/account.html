@@ -254,6 +254,7 @@
         var block = cb.dataset.block;
         var key = day + '_' + block;
         if (cb.checked) { map[key] = true; }
+        else {map[key] = false; }
       });
       return map;
     }
@@ -308,7 +309,7 @@
     });
 
     document.getElementById('cancelBtn').addEventListener('click', function () {
-      window.location.href = 'index.html';
+      window.location.href = 'board.html';
     });
   </script>
 
