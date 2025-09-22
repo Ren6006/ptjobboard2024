@@ -1,0 +1,393 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Daily Schedule</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!--<meta http-equiv="refresh" content="600">-->
+
+    <link rel="shortcut icon" href="https://www.hw.com/images/calendar.png">
+    <link rel="apple-touch-icon" href="https://www.hw.com/images/daily_schedule.png">
+    <link rel="stylesheet" href="https://code.jquery.com/mobile/1.4.2/jquery.mobile-1.4.2.min.css" />
+    <link rel="stylesheet" href="https://code.jquery.com/mobile/1.4.2/jquery.mobile-1.4.2.min.css" />
+    <link rel="stylesheet" href="assets/css/theme/fonts.css" />
+
+    <script src="https://code.jquery.com/jquery-1.8.2.min.js"></script>
+    <script src="https://code.jquery.com/mobile/1.4.2/jquery.mobile-1.4.2.min.js"></script>
+
+    <script type="text/javascript">
+
+        var xmlDoc;
+        var selectedDate = new Date();
+
+        $(function () {
+            var campus = getQueryString("campus").toUpperCase();
+            if (campus !== "") {
+                document.cookie = 'campus=' + escape(campus) + ';path=/;expires=Thu, 31 Dec 2099 12:00:00 GMT';
+            }
+
+
+            (function timeout1() {
+                getData(get_campus());
+                var i = 0;
+                (function timeout2() {
+                    get_CurrentPeriod();
+                    ++i;
+                    setTimeout(i < 60 ? timeout2 : timeout1, 1000);
+                })();
+            })();
+
+            //getData(get_campus());
+
+            //window.setInterval(function () {
+            //    get_CurrentPeriod();
+            //}, 1000);
+
+            $(".ui-btn").click(function () {
+                var id = $(this).attr('id');
+                if (id === 'btnNext') {
+                    moveDate(1);
+                } else if (id === 'btnPrev') {
+                    moveDate(-1);
+                } else if (id === 'btnToday') {
+                    selectedDate = new Date();
+                    showSchedule();
+                }
+            });
+
+            $(":radio").click(function () {
+                getData($(this).val());
+            });
+
+            $("body").on("swipeleft", function () {
+                moveDate(1);
+            });
+            $("body").on("swiperight", function () {
+                moveDate(-1);
+            });
+        });
+
+        function getData(campus) {
+            selectedDate = new Date();
+            var url = "https://www.hw.com/portals/0/reports/DailySchedules" + campus + ".xml?t=" + Math.random().toString();
+            $.ajax({
+                type: "GET",
+                url: url,
+                dataType: "xml",
+                success: function (xml) {
+                    xmlDoc = xml;
+                    showSchedule();
+                    document.cookie = 'campus=' + escape(campus) + ';path=/;expires=Thu, 31 Dec 2099 12:00:00 GMT';
+                }
+            });
+        }
+
+        function moveDate(increment) {
+            selectedDate.setDate(selectedDate.getDate() + increment);
+            showSchedule();
+        }
+
+        function getSelectedDateString() {
+            var weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            return weekdays[selectedDate.getDay()] + ", " + months[selectedDate.getMonth()] + " " + selectedDate.getDate() + ", " + selectedDate.getFullYear();
+        }
+
+        function getSelectedDate() {
+            var month = selectedDate.getMonth() + 1;
+            var day = selectedDate.getDate();
+            var year = selectedDate.getFullYear();
+            return (((month < 10) ? '0' + month : month) + '/' + ((day < 10) ? '0' + day : day) + '/' + year);
+        }
+
+        function showSchedule() {
+
+            $("#date").text(getSelectedDateString());
+            $("#schedule").html("");
+            $("#nextperiod").html("");
+            $("#cycleday").html("No Schedule");
+
+            $(xmlDoc).find("CalendarDay").each(function () {
+                if ($(this).find("Date").text() == getSelectedDate()) {
+                    $("#cycleday").html($(this).find("SchoolDayDescription").text());
+
+                    // read the periods
+                    var table = "<table class='periods'>";
+                    $(this).find('Period').each(function () {
+                        var periodCode = $(this).find("PeriodCode").text();
+                        var rowStyle = "";
+                        switch (periodCode) {
+                            case "FC":
+                                rowStyle = " style='background-color: #E1E2E3;'"; break;
+                            case "A":
+                                rowStyle = " style='background-color: #E1E2E3;'"; break;
+                            case "B":
+                            case "B1":
+                            case "B2":
+                            case "CT":
+                                rowStyle = " style='background-color: #E6AA03;'"; break;
+                            case "DS":
+                                rowStyle = " style='background-color: #DE917C;'"; break;
+                            case "H":
+                            case "V":
+                            case "Y":
+                                rowStyle = " style='background-color: #97999C;color: #FFFFFF;'"; break;
+                            case "L":
+                                rowStyle = " style='background-color: #C61C2B;color: #FFFFFF;'"; break;
+                            default:
+                                if (periodCode.substring(0, 2) === "M1") {
+                                    rowStyle = " style='background-color: #7D7E81;color: #FFFFFF;'";
+                                }
+                        }
+                        table += "<tr" + rowStyle + ">";
+                        table += "<td class='periodNumber'><i></i>" + periodCode + "</td>";
+                        table += "<td class='periodStart'>" + getTimeString($(this).find("StartTime").text()) + "</td>";
+                        table += "<td class='periodSeparator'>&ndash;</td>";
+                        table += "<td class='periodEnd'>" + getTimeString($(this).find("EndTime").text()) + "</td>";
+                        table += "</tr>";
+                    });
+                    table += "</table>";
+                    $("#schedule").append(table);
+                    get_CurrentPeriod();
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        function getTimeString(time) {
+            return time.replace('1/1/1900 ', '').replace(':00 AM', '').replace(':00 PM', '');
+        }
+
+        function showCurrentTime() {
+            var now = new Date();
+            var text = isToday() ? ("Current time is <span class='time'>" + get_CurrentTime(now) + "</span>") : "";
+            $("#currenttime").html(text);
+        }
+
+        function getTimeValue(time) {
+            var temp = time.split(":");
+            var hour = parseInt(temp[0], 0);
+            var min = parseInt(temp[1], 0);
+            if (hour < 8) {
+                hour = hour + 12;
+            }
+            var today = new Date();
+            return new Date(today.getFullYear(), today.getMonth(), today.getDate(), hour, min);
+        }
+
+        function isToday() {
+            var today = new Date();
+            return selectedDate.setHours(0, 0, 0, 0) === today.setHours(0, 0, 0, 0);
+        }
+
+        function get_CurrentPeriod() {
+            showCurrentTime();
+            $("#nextperiod").html("");
+
+            if (!isToday()) {
+                $(".container").addClass('disabled');
+                $("#today").show();
+                return;
+            } else {
+                $(".container").removeClass('disabled');
+                $("#today").hide();
+            }
+
+            var now = new Date();
+            $("tr").each(function (i, row) {
+                var $row = $(row);
+                $row.removeClass('currentPeriod');
+                $row.find("td:first").find("i:first").removeClass("fas fa-lg fa-caret-right");
+
+                var periodEnd = getTimeValue($row.find('td.periodEnd').text());
+                var periodStart = getTimeValue($row.find('td.periodStart').text());
+                if ($row.is(":last-child")) {
+                    // last period of the day
+                    if (now.getTime() <= periodEnd.getTime()) {
+                        $row.addClass('currentPeriod');
+                        $row.find("td:first").find("i:first").addClass("fas fa-lg fa-caret-right");
+                        $("#nextperiod").html("School day ends in <span class='time'>" + get_NextPeriod($row.find('td.periodEnd').text()) + "</span>");
+                        return false;
+                    } else {
+                        $("#nextperiod").html("<span class='time'>School day has ended</span>");
+                    }
+                } else {
+                    var $nextRow = $row.next();
+                    if (now.getTime() <= periodStart.getTime() && $row.is(":first-child")) {
+                        //before first period of the day
+                        $nextRow = $row;
+                    }
+                    var nextPeriodNumber = $nextRow.find('td.periodNumber').text();
+                    var nextPeriod = $nextRow.find('td.periodStart');
+                    var nextPeriodStarts = getTimeValue(nextPeriod.text());
+                    if (now.getTime() <= nextPeriodStarts.getTime()) {
+                        $row.addClass('currentPeriod');
+                        $row.find("td:first").find("i:first").addClass("fas fa-lg fa-caret-right");
+                        $("#nextperiod").html("Period <b>" + nextPeriodNumber + "</b> starts in <span class='time'>" + get_NextPeriod(nextPeriod.text()) + "</span>");
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+
+        function get_NextPeriod(startTime) {
+            var msec = getTimeValue(startTime) - new Date();
+            var hh = Math.floor(msec / 1000 / 60 / 60);
+            msec -= hh * 1000 * 60 * 60;
+            var mm = Math.floor(msec / 1000 / 60);
+            msec -= mm * 1000 * 60;
+            var ss = Math.floor(msec / 1000);
+            if (hh > 0) {
+                return hh + ":" + (mm < 10 ? '0' + mm : mm) + ":" + (ss < 10 ? '0' + ss : ss);
+            } else {
+                return mm + ":" + (ss < 10 ? '0' + ss : ss);
+            }
+        }
+
+        function get_CurrentTime(date) {
+            var hours = date.getHours();
+            var minutes = date.getMinutes();
+            var seconds = date.getSeconds();
+            var ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12; // the hour '0' should be '12'
+            minutes = minutes < 10 ? '0' + minutes : minutes;
+            seconds = seconds < 10 ? '0' + seconds : seconds;
+            var strTime = hours + ':' + minutes + ' ' + ampm;
+            return strTime;
+        }
+
+        function get_campus() {
+            var pattern = RegExp("campus=.[^;]*");
+            var matched = document.cookie.match(pattern);
+            var campus = 'MS';
+            if (matched) {
+                var cookie = matched[0].split('=');
+                campus = cookie[1];
+            }
+            if (campus === 'MS') {
+                $(":radio:first").attr("checked", "checked");
+            } else {
+                $(":radio:last").attr("checked", "checked");
+            }
+            $(":radio").checkboxradio("refresh");
+
+            return campus;
+        }
+
+        function getQueryString(name) {
+            var url = window.location.href;    
+            var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+                results = regex.exec(url);
+            if (!results) return '';
+            if (!results[2]) return '';
+            return decodeURIComponent(results[2].replace(/\+/g, " "));
+        }
+
+    </script>
+
+    <style>
+        div.container {
+            margin-left: auto;
+            margin-right: auto;
+            text-align: center;
+            display: block;
+        }
+
+        div.disabled {
+            background-color: #e5e4e2;
+        }
+
+        div.schedule {
+            text-align: center;
+        }
+
+            div.schedule table {
+                margin: 0 auto;
+                text-align: left;
+            }
+
+        div#nextperiod {
+            margin-top: .5rem;
+        }
+
+        .periods {
+            margin: 0 auto;
+            border-collapse: collapse;
+            border: solid 1px #ccc;
+        }
+
+        table td {
+            text-shadow: none !important;
+            padding: 4px 0 2px 0;
+        }
+
+            table td.periodNumber {
+                font-weight: bold;
+                padding-left: 8px;
+                padding-right: 10px;
+            }
+
+            table td.periodStart {
+                text-align: right;
+            }
+
+            table td.periodEnd {
+                text-align: left;
+                padding-right: 8px;
+            }
+
+            table td.periodSeparator {
+                text-align: center;
+                padding-left: 4px;
+                padding-right: 4px;
+            }
+
+        table tr.currentPeriod td {
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        i.fas { margin-right: 4px; }
+
+        table tr.currentPeriod {
+            border: solid 3px #cf0a2c;
+        }
+
+        .time {
+            font-weight: bold;
+            color: #cf0a2c;
+        }
+
+        .ui-btn-inline {
+            margin-right: 0 !important;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div class='container' data-role="page" data-theme="a">
+
+        <fieldset data-role="controlgroup" data-type="horizontal">
+            <input type="radio" name="radio-choice-h-2" id="ms-radio" value="MS">
+            <label for="ms-radio">Middle School</label>
+            <input type="radio" name="radio-choice-h-2" id="us-radio" value="US">
+            <label for="us-radio">Upper School</label>
+        </fieldset>
+
+        <div id="navDate">
+            <a href="dailyschedule#" id="btnPrev" class="ui-btn ui-btn-inline ui-icon-carat-l ui-btn-icon-notext ui-corner-all">Prev</a>&nbsp;<span id="date" style='font-weight: bold;'></span>
+            <a href="dailyschedule#" id="btnNext" class="ui-btn ui-btn-inline ui-icon-carat-r ui-btn-icon-notext ui-corner-all">Next</a>
+        </div>
+
+        <div id="cycleday" style='margin-top: -6px;margin-bottom: 4px; font-weight:bold'></div>
+        <div id="currenttime"></div>
+        <div id="schedule"></div>
+        <div id="nextperiod"></div>
+        <div id="today"><a href="dailyschedule#" id="btnToday" class="ui-btn ui-btn-inline ui-mini ui-icon-bullets ui-corner-all ui-btn-icon-left">Show Today's Schedule</a></div>
+
+    </div>
+</body>
+</html>
