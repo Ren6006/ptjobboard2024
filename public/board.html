@@ -91,20 +91,33 @@
   <a id="accountBtn" href="account.html" class="my-account-btn">MY ACCOUNT</a>
 
   <div class="shell">
-    <div class="header">
-      <h1>Open Requests</h1>
+    <!-- NEW: Upcoming Sessions -->
+    <div class="header" style="margin-bottom: 6px;">
+      <h1>My Upcoming Sessions</h1>
       <p id="user-info" class="hidden"></p>
     </div>
-
+  
+    <div id="sessions-loading" class="hidden">Loading sessions…</div>
+    <div id="sessions"></div>
+  
+    <!-- Existing: Open Requests -->
+    <div class="header" style="margin-top: 24px;">
+      <h1>Open Requests</h1>
+    </div>
+  
     <div id="loading">Loading…</div>
     <div id="requests"></div>
   </div>
+  
 
   <!-- Firebase (modular) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getFirestore, collection, getDocs, addDoc, deleteDoc, doc, getDoc,
+      query, where
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   
     const firebaseConfig = {
       apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
@@ -123,8 +136,10 @@
     await setPersistence(auth, browserLocalPersistence).catch(()=>{});
   
     const loadingEl = document.getElementById('loading');
+    const sessionsLoadingEl = document.getElementById('sessions-loading');
     const userInfoEl = document.getElementById('user-info');
     const listEl = document.getElementById('requests');
+    const sessionsEl = document.getElementById('sessions');
   
     const blocksCatalog = {
       '1' : 'Block 1',
@@ -152,6 +167,7 @@
       } catch {}
       return String(raw);
     };
+  
   
     const optionLabel = (slot) => {
       const parts = [];
@@ -197,20 +213,17 @@
           items.push(c);
         }
       }
-      // de-dupe + normalize
       return new Set(items.map(norm).filter(Boolean));
     };
   
-    // does the request match the tutor's teachable set?
-    // checks both 'class' and 'subject' fields for loose inclusion
     const isTeachable = (req, teachSet) => {
-      if (!teachSet || teachSet.size === 0) return true; // if no teach list on profile, don't block
+      if (!teachSet || teachSet.size === 0) return true;
       const reqClass = norm(req.class);
       const reqSubject = norm(req.subject);
       for (const t of teachSet) {
         if (!t) continue;
-        // accept if either side includes the other (handles "AP Calc AB" vs "Calculus")
-        if (t == reqClass) {
+        if ((reqClass && (reqClass.includes(t) || t.includes(reqClass))) ||
+            (reqSubject && (reqSubject.includes(t) || t.includes(reqSubject)))) {
           return true;
         }
       }
@@ -306,6 +319,7 @@
           });
   
           await deleteDoc(doc(db, 'Requests', docId));
+          await loadSessions(tutor);   
           wrap.remove();
         } catch (err) {
           console.error('Finalize error:', err);
@@ -317,6 +331,83 @@
       wrap.appendChild(right);
       return wrap;
     };
+  
+    // --- Sessions renderer (uses same banner layout for consistency) ---
+    const renderSession = (s) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'request-banner';
+  
+      const left = document.createElement('div');
+      left.className = 'req-col grow';
+      const slot = s.slot || {};
+      left.innerHTML = `
+        <h3>${s.name || 'Student'} <span class="pill">${s.subject || '—'}</span> <span class="pill">${s.class || '—'}</span></h3>
+        <div class="kv"><span class="k">Date</span><span>${optionLabel(slot)}</span></div>
+        <div class="kv"><span class="k">Location</span><span>${s.location || 'N/A'}</span></div>
+        <div class="kv"><span class="k">Status</span><span class="pill">${s.status || 'scheduled'}</span></div>
+      `;
+  
+      wrap.appendChild(left);
+      return wrap;
+    };
+
+    // --- NEW: reusable loader for "My Upcoming Sessions" ---
+const toDate = (raw) => {
+  if (!raw) return null;
+  if (raw instanceof Date) return isNaN(raw) ? null : raw;
+  let d = new Date(raw);
+  if (!isNaN(d)) return d;
+  const m = String(raw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const [, mm, dd, yyyy] = m.map(Number);
+    d = new Date(yyyy, mm - 1, dd);
+    if (!isNaN(d)) return d;
+  }
+  return null;
+};
+const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+
+async function loadSessions(currentUser) {
+  sessionsLoadingEl.classList.remove('hidden');
+  sessionsEl.innerHTML = ''; // clear previous render
+
+  // match by tutorName as requested
+  const myName = currentUser.displayName || '';
+  const qSessions = query(collection(db, 'Sessions'), where('tutorName', '==', myName));
+  const sessSnap = await getDocs(qSessions);
+
+  const upcoming = [];
+  const today = todayStart();
+
+  sessSnap.forEach((d) => {
+    const s = d.data() || {};
+    const dateObj = toDate(s.slot?.date);
+    if (dateObj && dateObj >= today) {
+      upcoming.push({ id: d.id, ...s, _dateObj: dateObj });
+    }
+  });
+
+  // sort by date, then cycleDay, then block
+  upcoming.sort((a, b) => {
+    const d = a._dateObj - b._dateObj;
+    if (d !== 0) return d;
+    const ac = (a.slot?.cycleDay ?? '').toString().localeCompare((b.slot?.cycleDay ?? '').toString());
+    if (ac !== 0) return ac;
+    return (a.slot?.block ?? '').toString().localeCompare((b.slot?.block ?? '').toString());
+  });
+
+  sessionsLoadingEl.classList.add('hidden');
+
+  if (upcoming.length === 0) {
+    const none = document.createElement('div');
+    none.id = 'sessions-empty';
+    none.textContent = 'No upcoming sessions.';
+    sessionsEl.appendChild(none);
+  } else {
+    upcoming.forEach((s) => sessionsEl.appendChild(renderSession(s)));
+  }
+}
+
   
     onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -343,7 +434,52 @@
         // teachable set
         const teachSet = buildTeachSet(profile);
   
-        // --- load requests ---
+        // ========== UPCOMING SESSIONS ==========
+        sessionsLoadingEl.classList.remove('hidden');
+  
+        // Query Sessions by tutorName == current user's displayName (as requested)
+        const myName = user.displayName || '';
+        const qSessions = query(
+          collection(db, 'Sessions'),
+          where('tutorName', '==', myName)
+        );
+        const sessSnap = await getDocs(qSessions);
+  
+        const today = todayStart();
+        const upcoming = [];
+  
+        sessSnap.forEach((d) => {
+          const s = d.data() || {};
+          const slot = s.slot || {};
+          const dateObj = toDate(slot.date);
+          if (!dateObj) return;
+          // keep today or future
+          if (dateObj >= today) {
+            upcoming.push({ id: d.id, ...s, _dateObj: dateObj });
+          }
+        });
+  
+        // Sort ascending by date, then by cycleDay, then by block (string compare)
+        upcoming.sort((a, b) => {
+          const d = a._dateObj - b._dateObj;
+          if (d !== 0) return d;
+          const ac = (a.slot?.cycleDay ?? '').toString().localeCompare((b.slot?.cycleDay ?? '').toString());
+          if (ac !== 0) return ac;
+          return (a.slot?.block ?? '').toString().localeCompare((b.slot?.block ?? '').toString());
+        });
+  
+        sessionsLoadingEl.classList.add('hidden');
+  
+        if (upcoming.length === 0) {
+          const none = document.createElement('div');
+          none.id = 'sessions-empty';
+          none.textContent = 'No upcoming sessions.';
+          sessionsEl.appendChild(none);
+        } else {
+          upcoming.forEach((s) => sessionsEl.appendChild(renderSession(s)));
+        }
+  
+        // ========== OPEN REQUESTS ==========
         const snap = await getDocs(collection(db, 'Requests'));
         loadingEl.classList.add('hidden');
   
@@ -369,9 +505,12 @@
           }
   
           // filter by availability match
+          const today = todayStart();
+
           const matchingSlots = slots.filter((s) => {
             const key = slotKey(s);
-            return key && myAvailSet.has(key);
+            const d = toDate(s?.date);
+            return key && myAvailSet.has(key) && d && d >= today; // availability AND not in the past
           });
   
           // filter by teachable class/subject
@@ -391,12 +530,15 @@
           none.textContent = 'No open requests that match your availability and classes to teach.';
           listEl.appendChild(none);
         }
+  
       } catch (e) {
+        sessionsLoadingEl.classList.add('hidden');
         loadingEl.textContent = 'Failed to load requests.';
         console.error(e);
       }
     });
   </script>
+  
   
   
 </body>
