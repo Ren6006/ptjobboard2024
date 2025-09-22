@@ -237,8 +237,7 @@
       const reqSubject = norm(req.subject);
       for (const t of teachSet) {
         if (!t) continue;
-        if ((reqClass && (reqClass.includes(t) || t.includes(reqClass))) ||
-            (reqSubject && (reqSubject.includes(t) || t.includes(reqSubject)))) {
+        if (reqClass == t || reqClass == "other") {
           return true;
         }
       }
