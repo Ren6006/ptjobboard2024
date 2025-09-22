@@ -232,6 +232,24 @@
       }
       return "";
     }
+    const blocksCatalog = {
+      '1' : 'Block 1',
+      'M11' : 'Junior Seminar',
+      '2' : 'Block 2',
+      'L' : 'Lunch',
+      '3' : 'Block 3',
+      'DS': 'DS',
+      'CC': 'CC (3:15-4:00)',
+      '4': 'Block 4',
+      'M10': 'Soph. Seminar',
+      '5': 'Block 5',
+      '6': 'Block 6',
+      '7': 'Block 7',
+      'FC': 'Faculty Collaboration',
+      'M12': 'Senior Seminar',
+      'CT': 'Community Time',
+      'OH': 'Office Hours',
+    };
 
 
     // ===== Availability picker state =====
@@ -306,9 +324,11 @@
         const code = p.getElementsByTagName('PeriodCode')[0].textContent.trim();
         const start = twelveHr(extractTime(p.getElementsByTagName('StartTime')[0].textContent));
         const end = twelveHr(extractTime(p.getElementsByTagName('EndTime')[0].textContent));
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="code">${code}</td><td class="time">${start} – ${end}</td><td class="pick"><button class="btn" data-code="${code}">Add</button></td>`;
-        table.appendChild(tr);
+        if (code in blocksCatalog){
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td class="code">${code}</td><td class="time">${start} – ${end}</td><td class="pick"><button class="btn" data-code="${code}">Add</button></td>`;
+          table.appendChild(tr);
+        }
       });
       scheduleWrap.innerHTML=''; scheduleWrap.appendChild(table);
       scheduleWrap.querySelectorAll('button[data-code]').forEach(btn=>{
