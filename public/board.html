@@ -105,8 +105,20 @@
       <h1>Open Requests</h1>
     </div>
   
+
+
+
+
     <div id="loading">Loading…</div>
     <div id="requests"></div>
+
+    <!-- NEW: Completed Sessions -->
+    <div class="header" style="margin-top: 24px;">
+      <h1>My Completed Sessions</h1>
+    </div>
+    <div id="completed-loading" class="hidden">Loading sessions…</div>
+    <div id="completed"></div>
+    
   </div>
   
 
@@ -140,6 +152,9 @@
     const userInfoEl = document.getElementById('user-info');
     const listEl = document.getElementById('requests');
     const sessionsEl = document.getElementById('sessions');
+    const completedLoadingEl = document.getElementById('completed-loading');
+    const completedEl = document.getElementById('completed');
+
   
     const blocksCatalog = {
       '1' : 'Block 1',
@@ -351,6 +366,51 @@
       return wrap;
     };
 
+    // --- NEW: reusable loader for "My Completed Sessions" (yesterday or earlier) ---
+    async function loadCompletedSessions(currentUser) {
+      completedLoadingEl.classList.remove('hidden');
+      completedEl.innerHTML = ''; // clear
+
+      // match by tutorName as requested (same as upcoming)
+      const myName = currentUser.displayName || '';
+      const qSessions = query(collection(db, 'Sessions'), where('tutorName', '==', myName));
+      const sessSnap = await getDocs(qSessions);
+
+      const today = todayStart();
+      const completed = [];
+
+      sessSnap.forEach((d) => {
+        const s = d.data() || {};
+        const dateObj = toDate(s.slot?.date);
+        if (!dateObj) return;
+        // keep strictly before today (yesterday or earlier)
+        if (dateObj < today) {
+          completed.push({ id: d.id, ...s, _dateObj: dateObj });
+        }
+      });
+
+      // sort ascending by date (same behavior as upcoming)
+      completed.sort((a, b) => {
+        const d = a._dateObj - b._dateObj;
+        if (d !== 0) return d;
+        const ac = (a.slot?.cycleDay ?? '').toString().localeCompare((b.slot?.cycleDay ?? '').toString());
+        if (ac !== 0) return ac;
+        return (a.slot?.block ?? '').toString().localeCompare((b.slot?.block ?? '').toString());
+      });
+
+      completedLoadingEl.classList.add('hidden');
+
+      if (completed.length === 0) {
+        const none = document.createElement('div');
+        none.id = 'completed-empty';
+        none.textContent = 'No completed sessions.';
+        completedEl.appendChild(none);
+      } else {
+        completed.forEach((s) => completedEl.appendChild(renderSession(s)));
+      }
+    }
+
+
     // --- NEW: reusable loader for "My Upcoming Sessions" ---
 const toDate = (raw) => {
   if (!raw) return null;
@@ -467,6 +527,9 @@ async function loadSessions(currentUser) {
           if (ac !== 0) return ac;
           return (a.slot?.block ?? '').toString().localeCompare((b.slot?.block ?? '').toString());
         });
+
+        await loadCompletedSessions(user);
+
   
         sessionsLoadingEl.classList.add('hidden');
   
