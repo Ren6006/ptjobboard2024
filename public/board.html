@@ -1,43 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Board</title>
   <style>
-    #requests-container { display:flex; flex-wrap:wrap; gap:20px; }
-    .post-it { width:200px; background:#fdfd96; padding:10px; border:1px solid #ccc; border-radius:8px; box-shadow:2px 2px 6px rgba(0,0,0,0.1); font-family:Arial,sans-serif; }
-    .post-it h3 { margin:0 0 5px 0; font-size:18px; font-weight:bold; }
-    .post-it p { margin:5px 0; font-size:14px; }
-    .post-it strong { font-weight:bold; }
-
-    .my-account-btn {
-      position:absolute; top:20px; right:20px; background:#007BFF; color:#fff;
-      padding:10px 20px; text-decoration:none; border-radius:4px; font-weight:bold; font-family:Arial,sans-serif;
+    :root {
+      --bg: #f7f7fb;
+      --card: #ffffff;
+      --ink: #111827;
+      --muted: #6b7280;
+      --brand: #1a57d6;
+      --brand-dark: #1547ad;
+      --ok: #10b981;
+      --danger: #ef4444;
+      --ring: rgba(26, 87, 214, 0.15);
     }
-    .my-account-btn:hover { background:#0056b3; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:var(--ink); }
+    a.my-account-btn {
+      position: fixed; top: 18px; right: 18px; z-index: 20;
+      background: var(--brand); color:#fff; text-decoration:none; padding:10px 16px; border-radius:8px; font-weight:600;
+      box-shadow: 0 4px 14px rgba(26,87,214,.25);
+    }
+    a.my-account-btn:hover { background: var(--brand-dark); }
 
+    .shell { max-width: 1100px; margin: 80px auto 40px; padding: 0 16px; }
+    .header { margin-bottom: 16px; }
+    .header h1 { margin: 0 0 6px; font-size: 24px; }
+    .header p { margin: 0; color: var(--muted); }
+
+    #loading { margin: 16px 0; padding: 12px 16px; background: #fff; border:1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 6px 14px rgba(0,0,0,0.04); }
     .hidden { display:none; }
+
+    /* Full-width banner per request */
+    .request-banner {
+      width: 100%;
+      display: flex;
+      align-items: stretch;
+      gap: 16px;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.05);
+      margin: 12px 0;
+    }
+    .req-col {
+      display: grid;
+      gap: 6px;
+    }
+    .req-col h3 {
+      margin: 0; font-size: 18px;
+    }
+    .kv { display:flex; gap:8px; flex-wrap: wrap; }
+    .kv .k { color: var(--muted); min-width: 72px; }
+    .pill {
+      display: inline-flex; align-items: center; padding: 4px 8px; border:1px solid #e5e7eb; border-radius: 9999px; background:#fafafa; font-size: 12px;
+    }
+    .grow { flex: 1 1 auto; }
+    .right {
+      display: flex; align-items: center; gap: 12px; margin-left: auto;
+    }
+    select.avail {
+      min-width: 260px;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db; border-radius: 10px; background: #fff;
+      outline: none;
+    }
+    select.avail:focus { box-shadow: 0 0 0 4px var(--ring); border-color: var(--brand); }
+
+    button.primary {
+      padding: 10px 14px; border: 0; border-radius: 10px; background: var(--brand); color:#fff; font-weight:600; cursor: pointer;
+      box-shadow: 0 6px 14px rgba(26,87,214,0.25);
+    }
+    button.primary:hover { background: var(--brand-dark); }
+    button.ghost {
+      padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 10px; cursor: pointer;
+    }
+
+    /* Mobile */
+    @media (max-width: 800px) {
+      .request-banner { flex-direction: column; }
+      .right { justify-content: flex-start; margin-left: 0; }
+      select.avail { width: 100%; min-width: 0; }
+    }
   </style>
 </head>
 <body>
   <a id="accountBtn" href="account.html" class="my-account-btn">MY ACCOUNT</a>
 
-  <div id="loading" class="post-it">Loading…</div>
-  <div id="user-info" class="hidden"></div>
-  <div id="requests-container" class="hidden"></div>
+  <div class="shell">
+    <div class="header">
+      <h1>Open Requests</h1>
+      <p id="user-info" class="hidden"></p>
+    </div>
+
+    <div id="loading">Loading…</div>
+    <div id="requests"></div>
+  </div>
 
   <!-- Firebase (modular) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import {
-      getFirestore, collection, getDocs, addDoc, deleteDoc, doc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Use the config you used previously (no placeholders)
     const firebaseConfig = {
       apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
       authDomain: "ptjobboard2024.firebaseapp.com",
@@ -49,110 +117,202 @@
       measurementId: "G-PF9F78SKZV"
     };
 
-    // Init
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
     await setPersistence(auth, browserLocalPersistence).catch(()=>{});
 
-    const loading = document.getElementById('loading');
-    const userInfoDiv = document.getElementById('user-info');
-    const requestsContainer = document.getElementById('requests-container');
+    const loadingEl = document.getElementById('loading');
+    const userInfoEl = document.getElementById('user-info');
+    const listEl = document.getElementById('requests');
 
-    function show(el){ el.classList.remove('hidden'); }
-    function hide(el){ el.classList.add('hidden'); }
+    const blocksCatalog = {
+      '1' : 'Block 1',
+      'M11' : 'Junior Seminar',
+      '2' : 'Block 2',
+      'L' : 'Lunch',
+      '3' : 'Block 3',
+      'DS': 'DS',
+      'CC': 'CC (3:15-4:00)',
+      '4': 'Block 4',
+      'M10': 'Soph. Seminar',
+      '5': 'Block 5' ,
+      '6': 'Block 6',
+      '7': 'Block 7',
+      'FC': 'Faculty Collaboration',
+      'M12': 'Senior Seminar',
+      'CT': 'Community Time',
+      'OH': 'Office Hours' ,
+    };
+
+    const fmtDate = (raw) => {
+      // raw may be like '09/22/2025' or ISO; try both
+      try {
+        // If it already looks like an ISO string from your earlier page, this handles it too
+        const d = new Date(raw);
+        if (!isNaN(d)) return d.toLocaleString([], { dateStyle: 'medium' });
+      } catch {}
+      return String(raw);
+    };
+
+    const optionLabel = (slot) => {
+      // slot: {date, cycleDay, block, ...}
+      const parts = [];
+      if (slot?.date) parts.push(fmtDate(slot.date));
+      if (slot?.cycleDay) parts.push(`Day ${slot.cycleDay}`);
+      if (slot?.block) parts.push(`${blocksCatalog[slot.block]}`); // HERERERE
+      return parts.join(" • ") || "Unknown slot";
+    };
+
+    const renderRequest = (docId, data, tutor) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'request-banner';
+
+      // LEFT — Request details
+      const left = document.createElement('div');
+      left.className = 'req-col grow';
+      left.innerHTML = `
+        <h3>${data.name || 'No Name'} <span class="pill">${data.subject || '—'}</span> <span class="pill">${data.class || '—'}</span></h3>
+        <div class="kv"><span class="k">Email</span><span>${data.email || 'N/A'}</span></div>
+        <div class="kv"><span class="k">Grade</span><span>${data.grade || 'N/A'}</span></div>
+        <div class="kv"><span class="k">Topic</span><span>${data.topic || 'N/A'}</span></div>
+        <div class="kv"><span class="k">Location</span><span>${data.location || 'N/A'}</span></div>
+        <div class="kv"><span class="k">Info</span><span>${data.info || '—'}</span></div>
+      `;
+
+      // RIGHT — Availability selector + Finalize
+      const right = document.createElement('div');
+      right.className = 'right';
+
+      const avail = Array.isArray(data.availability) ? data.availability : [];
+      const select = document.createElement('select');
+      select.className = 'avail';
+      select.ariaLabel = 'Choose availability slot';
+      // placeholder
+      const ph = document.createElement('option');
+      ph.value = '';
+      ph.disabled = true;
+      ph.selected = true;
+      ph.textContent = avail.length ? 'Select an availability…' : 'No availability provided';
+      select.appendChild(ph);
+
+      avail.forEach((slot, idx) => {
+        const opt = document.createElement('option');
+        opt.value = String(idx);
+        opt.textContent = optionLabel(slot);
+        select.appendChild(opt);
+      });
+
+      const finalizeBtn = document.createElement('button');
+      finalizeBtn.className = 'primary';
+      finalizeBtn.textContent = 'Finalize';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'ghost';
+      cancelBtn.textContent = 'Dismiss';
+
+      right.appendChild(select);
+      right.appendChild(finalizeBtn);
+      right.appendChild(cancelBtn);
+
+      // Wire buttons
+      cancelBtn.addEventListener('click', () => {
+        // collapse UI back to idle; could also hide banner if you want a “soft” dismiss
+        select.selectedIndex = 0;
+      });
+
+      finalizeBtn.addEventListener('click', async () => {
+        const chosen = select.value;
+        if (!chosen) {
+          select.focus();
+          select.reportValidity?.();
+          return;
+        }
+        const i = parseInt(chosen, 10);
+        const chosenSlot = avail[i] || {};
+
+        finalizeBtn.disabled = true;
+
+        try {
+          // Create Session with selected slot + tutor identity
+          await addDoc(collection(db, 'Sessions'), {
+            requestId: docId,
+            // Copy forward relevant request fields
+            name: data.name || null,
+            email: data.email || null,
+            grade: data.grade || null,
+            subject: data.subject || null,
+            class: data.class || null,
+            topic: data.topic || null,
+            location: data.location || null,
+            info: data.info || null,
+
+            // Selected slot
+            slot: {
+              date: chosenSlot.date || null,
+              cycleDay: chosenSlot.cycleDay || null,
+              block: chosenSlot.block || null
+            },
+
+            // Tutor info from Auth
+            tutorUid: tutor.uid,
+            tutorEmail: tutor.email || null,
+            tutorName: tutor.displayName || null,
+
+            // Metadata
+            createdAt: new Date().toISOString(),
+            status: 'scheduled'
+          });
+
+          // Remove from Requests
+          await deleteDoc(doc(db, 'Requests', docId));
+
+          // Remove banner from UI
+          wrap.remove();
+        } catch (err) {
+          console.error('Finalize error:', err);
+          finalizeBtn.disabled = false;
+        }
+      });
+
+      wrap.appendChild(left);
+      wrap.appendChild(right);
+      return wrap;
+    };
 
     onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        // Not signed in — send to signup/login flow
         window.location.href = 'signup.html';
         return;
       }
-
-      // Signed in: show greeting and load requests
-      userInfoDiv.textContent = `Welcome, ${user.displayName || user.email || 'Tutor'}!`;
-      hide(loading);
-      show(userInfoDiv);
-      show(requestsContainer);
+      userInfoEl.textContent = `Signed in as ${user.displayName || user.email || 'Tutor'}`;
+      userInfoEl.classList.remove('hidden');
 
       try {
-        const snap = await getDocs(collection(db, "Requests"));
+        const snap = await getDocs(collection(db, 'Requests'));
+        loadingEl.classList.add('hidden');
+
+        if (snap.empty) {
+          const none = document.createElement('div');
+          none.id = 'empty';
+          none.textContent = 'No open requests.';
+          listEl.appendChild(none);
+          return;
+        }
+
         snap.forEach((d) => {
-          const data = d.data();
-          const note = document.createElement('div');
-          note.className = 'post-it';
-
-          note.innerHTML = `
-            <h3>${data.name || "No Name"}</h3>
-            <p><strong>Email:</strong> ${data.email || "N/A"}</p>
-            <p><strong>Grade:</strong> ${data.grade || "N/A"}</p>
-            <p><strong>Subject:</strong> ${data.subject || "N/A"}</p>
-            <p><strong>Class:</strong> ${data.class || "N/A"}</p>
-            <p><strong>Topic:</strong> ${data.topic || "N/A"}</p>
-            <p><strong>Date:</strong> ${data.date || "N/A"}</p>
-            <p><strong>Block:</strong> ${data.block || "N/A"}</p>
-            <p><strong>Location:</strong> ${data.location || "N/A"}</p>
-            <p><strong>Info:</strong> ${data.info || "N/A"}</p>
-          `;
-
-          // Accept flow
-          const acceptButton = document.createElement('button');
-          acceptButton.textContent = 'Accept Request';
-
-          const confirmationContainer = document.createElement('div');
-          confirmationContainer.style.display = 'none';
-
-          const confirmButton = document.createElement('button');
-          confirmButton.textContent = '✓';
-          confirmButton.style.marginRight = '10px';
-
-          const cancelButton = document.createElement('button');
-          cancelButton.textContent = 'x';
-
-          confirmationContainer.appendChild(confirmButton);
-          confirmationContainer.appendChild(cancelButton);
-
-          acceptButton.addEventListener('click', () => {
-            acceptButton.style.display = 'none';
-            confirmationContainer.style.display = 'inline-block';
-          });
-
-          confirmButton.addEventListener('click', async () => {
-            // Guard: ensure still signed in
-            const u = auth.currentUser;
-            if (!u) { window.location.href = 'signup.html'; return; }
-
-            confirmButton.disabled = true;
-            try {
-              await addDoc(collection(db, "Sessions"), {
-                ...data,
-                tutorUid: u.uid,
-                tutorEmail: u.email || null,
-                tutorName: u.displayName || null,
-                acceptedAt: new Date().toISOString()
-              });
-              await deleteDoc(doc(db, "Requests", d.id));
-              note.remove();
-            } catch (err) {
-              console.error("Error moving request to Sessions:", err);
-              confirmButton.disabled = false;
-              // restore UI
-              confirmationContainer.style.display = 'none';
-              acceptButton.style.display = 'inline-block';
-            }
-          });
-
-          cancelButton.addEventListener('click', () => {
-            confirmationContainer.style.display = 'none';
-            acceptButton.style.display = 'inline-block';
-          });
-
-          note.appendChild(acceptButton);
-          note.appendChild(confirmationContainer);
-          requestsContainer.appendChild(note);
+          const data = d.data() || {};
+          // Normalize older schemas just in case (availability could be object map or array)
+          if (data.availability && !Array.isArray(data.availability) && typeof data.availability === 'object') {
+            // Convert map of keys -> {block, cycleDay, date} into array
+            data.availability = Object.values(data.availability);
+          }
+          const banner = renderRequest(d.id, data, user);
+          listEl.appendChild(banner);
         });
       } catch (e) {
-        console.error("Error getting documents: ", e);
+        loadingEl.textContent = 'Failed to load requests.';
+        console.error(e);
       }
     });
   </script>
