@@ -2,72 +2,94 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In</title>
-    <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: Arial, sans-serif;
-        }
-        .signin-button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #4285F4;
-            color: white;
-            border: none;
-            border-radius: 5px;
-        }
-    </style>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js";
-        import { GoogleAuthProvider, signInWithPopup, getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword} from "https://www.gstatic.com/firebasejs/9.17.1/firebase-auth.js";
-
-        const firebaseConfig = {
-
-            apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
-            authDomain: "ptjobboard2024.firebaseapp.com",
-            databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-            projectId: "ptjobboard2024",
-            storageBucket: "ptjobboard2024.firebasestorage.app",
-            messagingSenderId: "401143229772",
-            appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-            measurementId: "G-PF9F78SKZV"
-
-        };
-
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth();
-        const provider = new GoogleAuthProvider();
-
-        const googleSignIn = async () => {
-        try {
-            const result = await signInWithPopup(auth, provider);
-            console.log('Google sign-in successful:', result.user);
-            const user = result.user;
-            // Redirect to board.html with the user's email as a query parameter
-            const email = encodeURIComponent(user.email);
-            window.location.href = `board.html?email=${email}`;
-
-        } catch (error) {
-            console.error('Error during Google sign-in:', error.message);
-        }
-        };
-
-
-
-        window.googleSignIn = googleSignIn;
-    </script>
-    
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In</title>
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: Arial, sans-serif; background: #f4f4f9; }
+    .box { background: #fff; padding: 32px 28px; border-radius: 10px; box-shadow: 0 6px 14px rgba(0,0,0,0.08); width: 420px; max-width: 90vw; }
+    h1 { margin: 0 0 12px; text-align: center; }
+    p.helper { margin: 0 0 16px; text-align: center; color: #666; }
+    label { font-weight: bold; margin: 10px 0 6px; display: block; }
+    input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    button { margin-top: 16px; width: 100%; padding: 12px; background: #007BFF; color: #fff; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    .error { color: #b00020; margin-top: 10px; }
+    .link { margin-top: 14px; text-align: center; }
+    .link a { color: #007BFF; text-decoration: none; font-weight: bold; }
+  </style>
 </head>
 <body>
-    <button onclick="googleSignIn()">Sign in with Google</button>
+  <div class="box">
+    <h1>Sign in</h1>
+    <p class="helper">Use your school email ending with <strong>@hwemail.com</strong>.</p>
+    <form id="loginForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" placeholder="you@hwemail.com" required />
+
+      <label for="password">Password</label>
+      <input id="password" type="password" placeholder="Your password" required />
+
+      <button type="submit">Sign in</button>
+      <div id="error" class="error"></div>
+    </form>
+    <div class="link">No account? <a href="signup.html">Sign up</a></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="common-auth.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
+      authDomain: "ptjobboard2024.firebaseapp.com",
+      databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
+      projectId: "ptjobboard2024",
+      storageBucket: "ptjobboard2024.firebasestorage.app",
+      messagingSenderId: "401143229772",
+      appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
+      measurementId: "G-PF9F78SKZV"
+    };
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+
+     // If already signed in, send to request form
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        window.location.href = "board.html";
+      }
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get('next') || 'board.html';
+
+    document.getElementById('loginForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const errorBox = document.getElementById('error');
+      errorBox.textContent = '';
+      if (!email.endsWith('@hwemail.com')) {
+        errorBox.textContent = 'Please use your @hwemail.com email.';
+        return;
+      }
+      try {
+        const cred = await auth.signInWithEmailAndPassword(email, password);
+        await db.collection('users').doc(cred.user.uid).set({
+          email: email,
+          last_login_at: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        const doc = await db.collection('users').doc(cred.user.uid).get();
+        if (!doc.exists || !doc.data().role) {
+          await db.collection('users').doc(cred.user.uid).set({ role: 'student' }, { merge: true });
+        }
+        window.location.href = next;
+      } catch (err) {
+        errorBox.textContent = err && err.message ? err.message : 'Login failed';
+      }
+    });
+  </script>
 </body>
 </html>
