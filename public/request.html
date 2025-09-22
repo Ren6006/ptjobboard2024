@@ -92,6 +92,11 @@
     .muted { color: #94a3b8; }
 
     .empty { text-align: center; padding: 18px; color: #64748b; }
+
+    .schedule.btn:hover {
+      background-color: rgba(0,0,0,0.08); /* light gray shade */
+    }
+
     
   </style>
 </head>
@@ -216,8 +221,21 @@
       });
     });
 
+    // Keep track of the selected date's cycle day (from XML)
+    let selectedCycleDay = "";
+
+    // Safe getter for possible tag names in the HW XML
+    function getFirstTagText(node, tagNames = []) {
+      for (const t of tagNames) {
+        const el = node.getElementsByTagName(t)[0];
+        if (el && el.textContent) return el.textContent.trim();
+      }
+      return "";
+    }
+
+
     // ===== Availability picker state =====
-    const slots = []; // {date: 'MM/DD/YYYY', block: '1' | 'M11' | 'L' | ...}
+    const slots = []; // {date: 'MM/DD/YYYY', block: '1' | 'M11' | 'L' | ..., cycleDay: '1' | '2' | ...}
     const chips = document.getElementById('chips');
     const availabilityJson = document.getElementById('availabilityJson');
     function syncHiddenField(){ availabilityJson.value = JSON.stringify(slots); }
@@ -299,7 +317,7 @@
           const block = btn.getAttribute('data-code');
           // prevent exact duplicates
           if(!slots.find(s=>s.date===d && s.block===block)){
-            slots.push({date: d, block});
+            slots.push({date: d, block, cycleDay: selectedCycleDay });
             renderChips(); 
             syncHiddenField();
             // Update this button: show check mark & disable
@@ -311,20 +329,29 @@
 
     }
 
+
     slotDate.addEventListener('change', async ()=>{
       if(!slotDate.value){ return; }
-      // Show selected date on the button label
       calendarBtnLabel.textContent = toMMDDYYYY(slotDate.value);
-    
+
       const xml = await fetchXml();
       const target = toMMDDYYYY(slotDate.value);
       const days = Array.from(xml.getElementsByTagName('CalendarDay'));
       const match = days.find(d => (d.getElementsByTagName('Date')[0]?.textContent||'').trim() === target);
-      if(!match){ scheduleWrap.innerHTML = '<div class="empty">No school schedule found for this date.</div>'; dayLabel.textContent=''; return; }
-      const desc = match.getElementsByTagName('SchoolDayDescription')[0]?.textContent || '';
-      dayLabel.textContent = desc;
+
+      if(!match){
+        scheduleWrap.innerHTML = '<div class="empty">No school schedule found for this date.</div>';
+        dayLabel.textContent='';
+        selectedCycleDay = ""; // clear if no match
+        return;
+      }
+
+      // Try several likely tag names; fall back to description if needed
+      selectedCycleDay = (match.getElementsByTagName('CycleDay')[0]?.textContent || '').trim();
+
       buildScheduleTable(match);
     });
+
 
     calendarBtn.addEventListener('click', () => {
       // Prefer the modern API when available
