@@ -109,6 +109,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <!-- Include Firebase Firestore -->
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="common-auth.js"></script>
     <script>
       // Your Firebase configuration
       const firebaseConfig = {
@@ -226,10 +228,7 @@
         });
     </script>
     <script>
-        // Insert the "BOARD" button at the top right linking to board.html
-        const userEmail = email;
-        const boardUrl = "board.html?email=" + encodeURIComponent(userEmail);
-        document.write('<a href="' + boardUrl + '" class="my-account-btn">BOARD</a>');
+      // Replace document.write navigation with top-right common controls; no extra buttons here
     </script>
 </body>
 </html>

@@ -84,10 +84,12 @@
     <!-- Container for the buttons and additional text -->
     <div class="box">
         <!-- Buttons -->
-        <a href="request.html" class="button">I'm a student!</a>
-        <a href="signin.html" class="button">I'm a tutor!</a>
-        <a href="admin.html" class="button">I'm an admin!</a>
+        <a href="signup.html" class="button">I'm a student!</a>
+        <a href="signin.html?next=board.html" class="button">I'm a tutor!</a>
         
     </div>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="common-auth.js"></script>
 </body>
 </html>

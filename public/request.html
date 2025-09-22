@@ -111,6 +111,8 @@
     opacity: 0.6; /* Make it look disabled */
     }
 
+    .hidden { display: none; }
+
   </style>
 </head>
 <body>
@@ -122,7 +124,6 @@
     
     <form id="dynamicForm">
         <input type="text" placeholder="Name (First and Last)" id="name"/>
-        <input type="text" placeholder="Email" id="email"/>
         <select id="grade">
             <option selected value="" disabled>↓ Select a grade</option>
             <option value=10>10th Grade</option>
@@ -143,8 +144,16 @@
             <option value="" disabled selected>↓ Select a class (Pick a subject first!)</option>
         </select>
         <input id="topic" type="text" placeholder="Topic (e.g. Factoring, Precipitation, History Research Project, etc.)" />
-        <input id="date" type="text" placeholder="Date in MM/DD/YYYY"/>
-        <input id="block" type="text" placeholder="Block (i.e. Block 6, Block 1, Conference Time, DS, Lunch, etc.)"/>
+        <input id="date" type="date" />
+        <div id="cycleDayInfo" style="font-size:12px;color:#555;margin-top:4px;"></div>
+        <select id="block">
+            <option value="" disabled selected>↓ Select a block</option>
+        </select>
+        <div id="blockAllWrapper" class="hidden">
+          <select id="blockAll">
+            <option value="" disabled selected>↓ Select any block</option>
+          </select>
+        </div>
         <input id="location" type="text" placeholder='Location (Leave blank for Learning Center, "Virtual" for Zoom)'/>
         <input id="info" type="text" placeholder="Additional Information"/>
         <button>Submit</button>
@@ -158,6 +167,9 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <!-- Include Firebase Firestore -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <!-- Include Firebase Auth -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="common-auth.js"></script>
 
   <script>
 
@@ -176,11 +188,17 @@
     };
 
 
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
+    // Initialize Firebase (guard against double init due to common-auth.js)
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
     var db = firebase.firestore();
+    var auth = firebase.auth();
     const subjectChoice = document.getElementById("subject");
-    const topicChoice = document.getElementById("class");
+    const classChoice = document.getElementById("class");
+    const blockSelect = document.getElementById("block");
+    const blockAllSelect = document.getElementById("blockAll");
+    const blockAllWrapper = document.getElementById("blockAllWrapper");
+    const dateInput = document.getElementById('date');
+    let userProfile = null;
 
     const options = {
       math: ["Geometry", "Advanced Geometry", "Honors Geometry", "Algebra II", "Advanced Algebra II", "Honors Algebra II", "Precalculus", "Advanced Precalculus", "Honors Precalculus", "AP Calculus AB", "AP Calculus BC", "Linear Algebra", "Other"],
@@ -193,51 +211,189 @@
     };
 
 
-    if(subjectChoice.value){
-        // Clear previous options in the second select
-        topicChoice.innerHTML = '<option value="" disabled selected>↓ Select a class</option>';
-
-        // Populate second select with relevant options
-        options[subjectChoice.value.toLowerCase()].forEach((topic) => {
-            const optionElement = document.createElement("option");
-            optionElement.value = topic;
-            optionElement.textContent = topic;
-            topicChoice.appendChild(optionElement);
-    });}
+    function rebuildClassOptions(subject){
+      classChoice.innerHTML = '<option value="" disabled selected>↓ Select a class</option>';
+      if (!subject) { return; }
+      const list = options[subject.toLowerCase()] || [];
+      const preferred = (userProfile && Array.isArray(userProfile.classes)) ? list.filter(c => userProfile.classes.indexOf(c) !== -1) : [];
+      const rest = list.filter(c => preferred.indexOf(c) === -1);
+      if (preferred.length > 0) {
+        const group = document.createElement('optgroup');
+        group.label = 'Your classes';
+        preferred.forEach((topic) => {
+          const opt = document.createElement('option');
+          opt.value = topic; opt.textContent = topic;
+          group.appendChild(opt);
+        });
+        classChoice.appendChild(group);
+      }
+      rest.forEach((topic) => {
+        const opt = document.createElement('option');
+        opt.value = topic; opt.textContent = topic;
+        classChoice.appendChild(opt);
+      });
+    }
     
 
     subjectChoice.addEventListener("change", () => {
       const selectedSubject = subjectChoice.value;
+      rebuildClassOptions(selectedSubject);
+    });
 
-      if (selectedSubject) {
-        // Clear previous options in the second select
-        topicChoice.innerHTML = '<option value="" disabled selected>↓ Select a class</option>';
+    const blocksCatalog = [
+      { id: 'B1', label: 'Block 1' },
+      { id: 'B2', label: 'Block 2' },
+      { id: 'B3', label: 'Block 3' },
+      { id: 'B4', label: 'Block 4' },
+      { id: 'B5', label: 'Block 5' },
+      { id: 'B6', label: 'Block 6' },
+      { id: 'B7', label: 'Block 7' },
+      { id: 'LUNCH', label: 'Lunch' },
+      { id: 'DS', label: 'DS/Conference' }
+    ];
 
-        // Populate second select with relevant options
-        options[selectedSubject.toLowerCase()].forEach((topic) => {
-          const optionElement = document.createElement("option");
-          optionElement.value = topic;
-          optionElement.textContent = topic;
-          topicChoice.appendChild(optionElement);
+    function buildAllBlocksSelect() {
+      blockAllSelect.innerHTML = '<option value="" disabled selected>↓ Select any block</option>';
+      blocksCatalog.forEach((blk) => {
+        const opt = document.createElement('option');
+        opt.value = blk.label;
+        opt.textContent = blk.label;
+        blockAllSelect.appendChild(opt);
+      });
+    }
+
+    function buildUserBlocksSelect(availability) {
+      blockSelect.innerHTML = '<option value="" disabled selected>↓ Select a block</option>';
+      const available = new Set();
+      if (availability && typeof availability === 'object') {
+        Object.keys(availability).forEach((k) => {
+          if (availability[k]) {
+            const parts = k.split('_');
+            if (parts.length === 2) { available.add(parts[1]); }
+          }
         });
+      }
+      const idToLabel = blocksCatalog.reduce((acc, b) => { acc[b.id] = b.label; return acc; }, {});
+      const labels = [];
+      available.forEach((id) => { if (idToLabel[id]) { labels.push(idToLabel[id]); } });
+      labels.sort();
+      labels.forEach((lbl) => {
+        const opt = document.createElement('option');
+        opt.value = lbl; opt.textContent = lbl;
+        blockSelect.appendChild(opt);
+      });
+      const otherOpt = document.createElement('option');
+      otherOpt.value = '__OTHER__';
+      otherOpt.textContent = 'Other…';
+      blockSelect.appendChild(otherOpt);
+    }
 
-      } 
+    function buildBlocksForDay(availability, dayNumber) {
+      blockSelect.innerHTML = '<option value="" disabled selected>↓ Select a block</option>';
+      const labels = [];
+      const idToLabel = blocksCatalog.reduce((acc, b) => { acc[b.id] = b.label; return acc; }, {});
+      if (availability && typeof availability === 'object' && dayNumber) {
+        Object.keys(availability).forEach((k) => {
+          if (!availability[k]) return;
+          const [dPart, bPart] = k.split('_');
+          if (dPart === ('D' + String(dayNumber)) && idToLabel[bPart]) {
+            labels.push(idToLabel[bPart]);
+          }
+        });
+      }
+      // Fallback: if user has no availability for this day, show all blocks so the user can still choose
+      if (labels.length === 0) {
+        blocksCatalog.forEach((blk) => { labels.push(blk.label); });
+      }
+      labels.sort();
+      labels.forEach((lbl) => {
+        const opt = document.createElement('option');
+        opt.value = lbl; opt.textContent = lbl;
+        blockSelect.appendChild(opt);
+      });
+      const otherOpt = document.createElement('option');
+      otherOpt.value = '__OTHER__';
+      otherOpt.textContent = 'Other…';
+      blockSelect.appendChild(otherOpt);
+    }
+
+    async function getCycleDayForDate(yyyyMmDd) {
+      try {
+        const doc = await db.collection('cycleDays').doc(yyyyMmDd).get();
+        if (doc.exists) { return doc.data().day; }
+      } catch (e) {}
+      return null;
+    }
+
+    buildAllBlocksSelect();
+    blockSelect.addEventListener('change', function(){
+      if (blockSelect.value === '__OTHER__') {
+        blockAllWrapper.classList.remove('hidden');
+      } else {
+        blockAllWrapper.classList.add('hidden');
+      }
+    });
+
+    // Require authentication and prefill name/email
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        window.location.href = 'signup.html';
+        return;
+      }
+      // Prefill name from profile doc or auth displayName
+      try {
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        const profile = userDoc.exists ? userDoc.data() : {};
+        userProfile = profile;
+        const nameInput = document.getElementById('name');
+        if (nameInput && !nameInput.value) {
+          nameInput.value = (profile && profile.name) ? profile.name : (user.displayName || '');
+        }
+        const gradeEl = document.getElementById('grade');
+        if (gradeEl && profile && profile.grade) {
+          gradeEl.value = String(profile.grade);
+        }
+        // Build block select from user's availability (all blocks until date chosen)
+        buildUserBlocksSelect(profile && profile.availability ? profile.availability : {});
+        // If a subject already chosen (e.g., browser restore), rebuild classes now
+        if (subjectChoice && subjectChoice.value) {
+          rebuildClassOptions(subjectChoice.value);
+        }
+      } catch (e) {}
+
+      // React to date selection by loading the cycle day and filtering blocks
+      dateInput.addEventListener('change', async function(){
+        const iso = dateInput.value; // YYYY-MM-DD
+        if (!iso) return;
+        const infoEl = document.getElementById('cycleDayInfo');
+        const cycleDay = await getCycleDayForDate(iso);
+        if (cycleDay) {
+          if (infoEl) { infoEl.textContent = 'Cycle Day ' + cycleDay; }
+          buildBlocksForDay(userProfile && userProfile.availability ? userProfile.availability : {}, cycleDay);
+        } else {
+          if (infoEl) { infoEl.textContent = 'Cycle day not found yet for this date.'; }
+          // Fallback to all available blocks if day not found yet
+          buildUserBlocksSelect(userProfile && userProfile.availability ? userProfile.availability : {});
+        }
+      });
     });
 
     // Add an event listener to the form submission
-    document.getElementById("dynamicForm").addEventListener("submit", function(event) {
+    document.getElementById("dynamicForm").addEventListener("submit", async function(event) {
         event.preventDefault(); // Prevent default form submission
 
         // Get form field values
         // Get form field values
         const name = document.getElementById("name").value.trim();
-        const email = document.getElementById("email").value.trim();
+        const user = auth.currentUser;
+        const email = user ? user.email : '';
         const grade = document.getElementById("grade").value;
         const subject = document.getElementById("subject").value;
         const classSelection = document.getElementById("class").value;
         const topic = document.getElementById("topic").value.trim();
-        const date = document.getElementById("date").value.trim();
-        const block = document.getElementById("block").value.trim();
+        const dateIso = document.getElementById("date").value.trim();
+        const blockValue = (blockSelect.value === '__OTHER__') ? blockAllSelect.value : blockSelect.value;
         let location = document.getElementById("location").value.trim();
         if (!location){
             location = "Learning Center";
@@ -247,9 +403,9 @@
         // Initialize an array to collect error messages
         let errors = [];
 
-        // 1) Check if the email ends in "@hwemail.com"
-        if (!email.endsWith("@hwemail.com")) {
-        errors.push("Email must end with '@hwemail.com'.");
+        // 1) Check school email via authenticated user
+        if (!email || !email.endsWith("@hwemail.com")) {
+          errors.push("Please sign in with your @hwemail.com email.");
         }
 
         // 2) Check if grade, subject, and class have been selected
@@ -257,32 +413,47 @@
         errors.push("Please select a grade.");
         }
         if (!subject) {
-        errors.push("Please select a subject.");
+          errors.push("Please select a subject.");
         }
         if (!classSelection) {
         errors.push("Please select a class.");
         }
 
-        // 3) Check if a date in the proper format has been entered
-        const datePattern = /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/\d{4}$/; // MM/DD/YYYY
-        
-        if (!datePattern.test(date)) {
-        errors.push("Date must be in MM/DD/YYYY format.");
+        // 3) Date must be chosen from picker
+        if (!dateIso) {
+          errors.push("Please pick a date.");
+        }
+
+        if (!blockValue) {
+          errors.push("Please select a block.");
         }
 
         // If there are errors, display them and prevent submission
         if (errors.length > 0) {
         alert(errors.join("\n"));
         } else {
+            // Convert YYYY-MM-DD to MM/DD/YYYY for storage
+            const date = dateIso ? (function(){ const [yy,mm,dd] = dateIso.split('-'); return `${mm}/${dd}/${yy}`; })() : '';
+            // Get cycle day (if available) for the selected date
+            let cycleDay = null;
+            try {
+              if (dateIso) {
+                const snap = await db.collection('cycleDays').doc(dateIso).get();
+                if (snap.exists) { cycleDay = snap.data().day || null; }
+              }
+            } catch (e) {}
+
             db.collection("Requests").add({
           name: name,
           email: email,
+          student_id: auth.currentUser ? auth.currentUser.uid : null,
           grade: grade,
           subject: subject,
           class: classSelection,
           topic: topic,
           date: date,
-          block: block,
+          block: blockValue,
+          cycleDay: cycleDay,
           location: location,
           info: info,
           timestamp: firebase.firestore.FieldValue.serverTimestamp()
