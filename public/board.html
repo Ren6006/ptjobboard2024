@@ -164,7 +164,7 @@
       return parts.join(" • ") || "Unknown slot";
     };
   
-    // helper: normalize to "cycleDay_block" e.g. "1_CC"
+    // --- helpers ---
     const slotKey = (slot) => {
       const day = `${slot?.cycleDay ?? ""}`.trim();
       const blk = `${slot?.block ?? ""}`.trim();
@@ -172,11 +172,55 @@
       return `${day}_${blk}`;
     };
   
+    const norm = (s) => (s ?? "")
+      .toString()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  
+    // build a teachable Set from various shapes: array OR map of booleans
+    const buildTeachSet = (profile) => {
+      const candidates = [
+        profile?.classesToTeach,
+        profile?.subjectsToTeach,
+        profile?.classes,
+        profile?.subjects
+      ].filter(Boolean);
+  
+      const items = [];
+      for (const c of candidates) {
+        if (Array.isArray(c)) {
+          items.push(...c);
+        } else if (c && typeof c === 'object') {
+          items.push(...Object.entries(c).filter(([,v]) => !!v).map(([k]) => k));
+        } else if (typeof c === 'string') {
+          items.push(c);
+        }
+      }
+      // de-dupe + normalize
+      return new Set(items.map(norm).filter(Boolean));
+    };
+  
+    // does the request match the tutor's teachable set?
+    // checks both 'class' and 'subject' fields for loose inclusion
+    const isTeachable = (req, teachSet) => {
+      if (!teachSet || teachSet.size === 0) return true; // if no teach list on profile, don't block
+      const reqClass = norm(req.class);
+      const reqSubject = norm(req.subject);
+      for (const t of teachSet) {
+        if (!t) continue;
+        // accept if either side includes the other (handles "AP Calc AB" vs "Calculus")
+        if (t == reqClass) {
+          return true;
+        }
+      }
+      return false;
+    };
+  
     const renderRequest = (docId, data, tutor, matchingSlots) => {
       const wrap = document.createElement('div');
       wrap.className = 'request-banner';
   
-      // LEFT — Request details
       const left = document.createElement('div');
       left.className = 'req-col grow';
       left.innerHTML = `
@@ -188,7 +232,6 @@
         <div class="kv"><span class="k">Info</span><span>${data.info || '—'}</span></div>
       `;
   
-      // RIGHT — Availability selector + Finalize (only the matches)
       const right = document.createElement('div');
       right.className = 'right';
   
@@ -250,17 +293,14 @@
             topic: data.topic || null,
             location: data.location || null,
             info: data.info || null,
-  
             slot: {
               date: chosenSlot.date || null,
               cycleDay: chosenSlot.cycleDay || null,
               block: chosenSlot.block || null
             },
-  
             tutorUid: tutor.uid,
             tutorEmail: tutor.email || null,
             tutorName: tutor.displayName || null,
-  
             createdAt: new Date().toISOString(),
             status: 'scheduled'
           });
@@ -287,18 +327,23 @@
       userInfoEl.classList.remove('hidden');
   
       try {
-        // 1) Load the tutor's availability map from users/{uid}
+        // --- load tutor profile ---
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
-        const availMap = (userSnap.exists() && userSnap.data()?.availability) || {};
-        // Build a Set of allowed keys where value is truthy
+        const profile = userSnap.exists() ? (userSnap.data() || {}) : {};
+  
+        // availability map -> Set of "cycleDay_block"
+        const availMap = profile.availability || {};
         const myAvailSet = new Set(
           Object.entries(availMap)
             .filter(([, v]) => !!v)
             .map(([k]) => k.trim())
         );
   
-        // 2) Load Requests
+        // teachable set
+        const teachSet = buildTeachSet(profile);
+  
+        // --- load requests ---
         const snap = await getDocs(collection(db, 'Requests'));
         loadingEl.classList.add('hidden');
   
@@ -314,7 +359,8 @@
   
         snap.forEach((d) => {
           const data = d.data() || {};
-          // Normalize availability into array of {date, cycleDay, block}
+  
+          // normalize request slots
           let slots = [];
           if (Array.isArray(data.availability)) {
             slots = data.availability;
@@ -322,14 +368,17 @@
             slots = Object.values(data.availability);
           }
   
-          // 3) Keep only slots that match the tutor's availability
+          // filter by availability match
           const matchingSlots = slots.filter((s) => {
             const key = slotKey(s);
             return key && myAvailSet.has(key);
           });
   
-          // 4) Only render if there's at least one match
-          if (matchingSlots.length > 0) {
+          // filter by teachable class/subject
+          const teachOK = isTeachable(data, teachSet);
+  
+          // render only if BOTH conditions pass
+          if (matchingSlots.length > 0 && teachOK) {
             const banner = renderRequest(d.id, data, user, matchingSlots);
             listEl.appendChild(banner);
             renderedCount++;
@@ -339,7 +388,7 @@
         if (renderedCount === 0) {
           const none = document.createElement('div');
           none.id = 'empty';
-          none.textContent = 'No open requests that match your availability.';
+          none.textContent = 'No open requests that match your availability and classes to teach.';
           listEl.appendChild(none);
         }
       } catch (e) {
@@ -348,6 +397,7 @@
       }
     });
   </script>
+  
   
 </body>
 </html>
