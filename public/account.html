@@ -19,7 +19,7 @@
     .section { margin-top: 24px; }
     /* Old blocks grid kept for reference, no longer used */
     .blocks { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; }
-    .block-item { border: 1px solid #ddd; border-radius: 8px; padding: 8px; display: flex; align-items: center; gap: 8px; background: #fafafa; max-width: 100%; }
+    .block-item { border: 1px solid #ddd; border-radius: 8px; padding: 8px; display: flex; align-items: center; gap: 8px; background: #fafafa; max-width: 100%; font-size:13px; }
     .actions { margin-top: 24px; display: flex; gap: 12px; }
     button { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; }
     .primary { background: #007BFF; color: #fff; }
@@ -31,7 +31,7 @@
     @media (max-width: 1100px) { .columns > details.day-card { flex-basis: calc((100% - 2 * 12px) / 3); } }
     @media (max-width: 700px) { .columns > details.day-card { flex-basis: calc((100% - 1 * 12px) / 2); } }
     details.day-card { border: 1px solid #e5e7eb; border-radius: 10px; background: #fafafa; }
-    details.day-card > summary { list-style: none; cursor: pointer; padding: 6px 10px; font-weight: bold; background: #f0f4ff; color: #1a57d6; border-radius: 10px 10px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    details.day-card > summary { list-style: none; cursor: pointer; padding: 6px 10px; font-size: 15px; font-weight: bold; background: #f0f4ff; color: #1a57d6; border-radius: 10px 10px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     details.day-card[open] > summary { border-bottom: 1px solid #e5e7eb; }
     .day-content { padding: 8px; display: grid; gap: 6px; grid-template-columns: 1fr; max-width: 100%; }
     .day-content .block-item { width: 100%; max-width: 100%; justify-content: flex-start; padding: 6px 8px; }
@@ -109,15 +109,53 @@
     const subjectsRoot = document.getElementById('subjectsRoot');
     const dayCount = 6;
     const blocksCatalog = [
-      { id: 'B1', label: 'Block 1' },
-      { id: 'B2', label: 'Block 2' },
-      { id: 'B3', label: 'Block 3' },
-      { id: 'B4', label: 'Block 4' },
-      { id: 'B5', label: 'Block 5' },
-      { id: 'B6', label: 'Block 6' },
-      { id: 'B7', label: 'Block 7' },
-      { id: 'LUNCH', label: 'Lunch' },
-      { id: 'DS', label: 'DS/Conference' }
+      [{ id: '1', label: 'Block 1' },
+      { id: 'M11', label: 'Junior Seminar' },
+      { id: '2', label: 'Block 2' },
+      { id: 'L', label: 'Lunch' },
+      { id: '3', label: 'Block 3' },
+      { id: 'DS', label: 'DS' },
+      { id: 'CC', label: 'CC (3:15-4:00)' }
+      ],
+      [{ id: '4', label: 'Block 4' },
+      { id: 'M10', label: 'Soph. Seminar' },
+      { id: '5', label: 'Block 5' },
+      { id: 'L', label: 'Lunch' },
+      { id: '6', label: 'Block 6'},
+      { id: '7', label: 'Block 7' },
+      { id: 'CC', label: 'CC (3:15-4:00)' },
+      ],
+      [{ id: 'FC', label: 'FC' },
+      { id: '2', label: 'Block 2' },
+      { id: 'L', label: 'Lunch' },
+      { id: '3', label: 'Block 3' },
+      { id: '1', label: 'Block 1' },
+      { id: 'CC', label: 'CC (3:15-4:00)' }
+      ],
+      [{ id: '5', label: 'Block 5' },
+      { id: 'M12', label: 'Senior Seminar' },
+      { id: '6', label: 'Block 6' },
+      { id: 'L', label: 'Lunch' },
+      { id: '7', label: 'Block 7' },
+      { id: '4', label: 'Block 4' },
+      { id: 'CC', label: 'CC (3:15-4:00)' }
+      ],
+      [{ id: '3', label: 'Block 3' },
+      { id: 'CT', label: 'CT' },
+      { id: '1', label: 'Block 1' },
+      { id: 'L', label: 'Lunch' },
+      { id: '2', label: 'Block 2' },
+      { id: 'DS', label: 'DS' },
+      { id: 'CC', label: 'CC (3:15-4:00)' }
+      ],
+      [{ id: '6', label: 'Block 6' },
+      { id: 'OH', label: 'Office Hours' },
+      { id: '7', label: 'Block 7' },
+      { id: 'L', label: 'Lunch' },
+      { id: '4', label: 'Block 4' },
+      { id: '5', label: 'Block 5' },
+      { id: 'CC', label: 'CC (3:15-4:00)' }
+      ],
     ];
 
     const subjectsCatalog = {
@@ -146,11 +184,12 @@
       for (var day = 1; day <= dayCount; day++) {
         var details = document.createElement('details');
         details.className = 'day-card';
+        details.open = true;
         var summary = document.createElement('summary');
         summary.textContent = 'Day ' + day;
         var content = document.createElement('div');
         content.className = 'day-content';
-        blocksCatalog.forEach(function (blk) {
+        blocksCatalog[day-1].forEach(function (blk) {
           var key = 'D' + day + '_' + blk.id;
           var wrapper = document.createElement('label');
           wrapper.className = 'block-item';
