@@ -229,7 +229,7 @@
       }
       slots.forEach((s,idx)=>{
         const chip=document.createElement('span'); chip.className='chip';
-        chip.innerHTML = `${s.date} • <strong>${s.block}</strong> <button aria-label="Remove" data-idx="${idx}">×</button>`;
+        chip.innerHTML = `${s.date}<strong>${s.block}</strong> <button aria-label="Remove" data-idx="${idx}">×</button>`;
         chip.querySelector('button').addEventListener('click', (e)=>{ slots.splice(idx,1); renderChips(); syncHiddenField(); });
         chips.appendChild(chip);
       });
@@ -300,10 +300,15 @@
           // prevent exact duplicates
           if(!slots.find(s=>s.date===d && s.block===block)){
             slots.push({date: d, block});
-            renderChips(); syncHiddenField();
+            renderChips(); 
+            syncHiddenField();
+            // Update this button: show check mark & disable
+            btn.textContent = "✓";
+            btn.disabled = true;
           }
         });
       });
+
     }
 
     slotDate.addEventListener('change', async ()=>{
