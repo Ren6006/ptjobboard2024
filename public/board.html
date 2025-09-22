@@ -69,7 +69,7 @@
     <script>
       // Your Firebase configuration (replace with your own keys if different)
       const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
+        apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
         authDomain: "ptjobboard2024.firebaseapp.com",
         databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
         projectId: "ptjobboard2024",
@@ -80,7 +80,7 @@
       };
 
       // Initialize Firebase
-      firebase.initializeApp(firebaseConfig);
+      if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
       const db = firebase.firestore();
       const auth = firebase.auth();
 
@@ -94,6 +94,17 @@
         }
         const email = user.email;
         userInfoDiv.textContent = `Welcome, ${email}!`;
+
+        // Inject "MY ACCOUNT" button (top-right) for the signed-in user
+        const accountUrl = 'account.html?email=' + encodeURIComponent(email);
+        const btn = document.createElement('a');
+        btn.href = accountUrl;
+        btn.className = 'my-account-btn';
+        btn.textContent = 'MY ACCOUNT';
+        document.body.appendChild(btn);
+
+        // Show loading state
+        requestsContainer.innerHTML = '<p>Loading requests…</p>';
 
         // Load tutor profile (availability)
         Promise.all([
@@ -127,7 +138,9 @@
             } catch(e){ return null; }
           }
 
-          const cards = [];
+          // Clear loading state
+          requestsContainer.innerHTML = '';
+          let rendered = 0;
           for (const doc of querySnapshot.docs) {
             const data = doc.data();
             const iso = toIso(data.date);
@@ -197,21 +210,17 @@
             note.appendChild(acceptButton);
             note.appendChild(confirmationContainer);
             requestsContainer.appendChild(note);
+            rendered++;
+          }
+          if (rendered === 0) {
+            requestsContainer.innerHTML = '<p>No requests to show.</p>';
           }
         }).catch((error) => {
           console.error("Error getting documents: ", error);
+          requestsContainer.innerHTML = '<p style="color:#b00020">Failed to load requests.</p>';
         });
       });
     </script>
-    <script>
-        // Example: Suppose you have the user's email from your authentication process
-        const userEmail = email;
-        
-        // Construct the URL with the email as a query parameter
-        const accountUrl = "account.html?email=" + encodeURIComponent(userEmail);
     
-        // Insert the button into the DOM with the correct URL
-        document.write('<a href="' + accountUrl + '" class="my-account-btn">MY ACCOUNT</a>');
-    </script>
 </body>
 </html>
