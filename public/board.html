@@ -1,205 +1,160 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Board</title>
-    <style>
-      /* Optional styling to arrange the notes */
-      #requests-container {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 20px;
-      }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Board</title>
+  <style>
+    #requests-container { display:flex; flex-wrap:wrap; gap:20px; }
+    .post-it { width:200px; background:#fdfd96; padding:10px; border:1px solid #ccc; border-radius:8px; box-shadow:2px 2px 6px rgba(0,0,0,0.1); font-family:Arial,sans-serif; }
+    .post-it h3 { margin:0 0 5px 0; font-size:18px; font-weight:bold; }
+    .post-it p { margin:5px 0; font-size:14px; }
+    .post-it strong { font-weight:bold; }
 
-      /* Basic styling for the post-it notes */
-      .post-it {
-        width: 200px; /* Adjust this width as needed */
-        background-color: #fdfd96; /* A "post-it" yellow color */
-        padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 8px;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
-        font-family: Arial, sans-serif;
-      }
-
-      .post-it h3 {
-        margin: 0 0 5px 0;
-        font-size: 18px;
-        font-weight: bold;
-      }
-
-      .post-it p {
-        margin: 5px 0;
-        font-size: 14px;
-      }
-
-      .post-it strong {
-        font-weight: bold;
-      }
-    /* Simple styling to place the button at the top right */
     .my-account-btn {
-        position: absolute;
-        top: 20px; 
-        right: 20px; 
-        background-color: #007BFF; 
-        color: #FFFFFF; 
-        padding: 10px 20px; 
-        text-decoration: none;
-        border-radius: 4px;
-        font-weight: bold;
-        font-family: Arial, sans-serif;
+      position:absolute; top:20px; right:20px; background:#007BFF; color:#fff;
+      padding:10px 20px; text-decoration:none; border-radius:4px; font-weight:bold; font-family:Arial,sans-serif;
     }
+    .my-account-btn:hover { background:#0056b3; }
 
-    .my-account-btn:hover {
-        background-color: #0056b3;
-    }
-    </style>
+    .hidden { display:none; }
+  </style>
 </head>
 <body>
-    <div id="user-info"></div>
-    <div id="requests-container"></div>
+  <a id="accountBtn" href="account.html" class="my-account-btn">MY ACCOUNT</a>
 
-    <!-- Include Firebase App (the core Firebase SDK) -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-    <!-- Include Firebase Firestore -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
-    <script>
-      // Your Firebase configuration (replace with your own keys if different)
-      const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "ptjobboard2024.firebaseapp.com",
-        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-        projectId: "ptjobboard2024",
-        storageBucket: "ptjobboard2024.firebasestorage.app",
-        messagingSenderId: "401143229772",
-        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-        measurementId: "G-PF9F78SKZV"
-      };
+  <div id="loading" class="post-it">Loading…</div>
+  <div id="user-info" class="hidden"></div>
+  <div id="requests-container" class="hidden"></div>
 
-      // Initialize Firebase
-      firebase.initializeApp(firebaseConfig);
-      const db = firebase.firestore();
+  <!-- Firebase (modular) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, collection, getDocs, addDoc, deleteDoc, doc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-      // Parse the email from the URL query parameter
-      const urlParams = new URLSearchParams(window.location.search);
-      const email = urlParams.get('email');
+    // Use the config you used previously (no placeholders)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
+      authDomain: "ptjobboard2024.firebaseapp.com",
+      databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
+      projectId: "ptjobboard2024",
+      storageBucket: "ptjobboard2024.firebasestorage.app",
+      messagingSenderId: "401143229772",
+      appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
+      measurementId: "G-PF9F78SKZV"
+    };
 
-      const userInfoDiv = document.getElementById('user-info');
-      const requestsContainer = document.getElementById('requests-container');
+    // Init
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    await setPersistence(auth, browserLocalPersistence).catch(()=>{});
 
-      if (email) {
-          userInfoDiv.textContent = `Welcome, ${email}!`;
+    const loading = document.getElementById('loading');
+    const userInfoDiv = document.getElementById('user-info');
+    const requestsContainer = document.getElementById('requests-container');
 
-          // Fetch documents from the "Requests" collection
-          db.collection("Requests").get().then((querySnapshot) => {
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
+    function show(el){ el.classList.remove('hidden'); }
+    function hide(el){ el.classList.add('hidden'); }
 
-      // Create a post-it note element
-      const note = document.createElement('div');
-      note.classList.add('post-it');
-
-      // Construct the inner HTML with document data
-      note.innerHTML = `
-        <h3>${data.name || "No Name"}</h3>
-        <p><strong>Email:</strong> ${data.email || "N/A"}</p>
-        <p><strong>Grade:</strong> ${data.grade || "N/A"}</p>
-        <p><strong>Subject:</strong> ${data.subject || "N/A"}</p>
-        <p><strong>Class:</strong> ${data.class || "N/A"}</p>
-        <p><strong>Topic:</strong> ${data.topic || "N/A"}</p>
-        <p><strong>Date:</strong> ${data.date || "N/A"}</p>
-        <p><strong>Block:</strong> ${data.block || "N/A"}</p>
-        <p><strong>Location:</strong> ${data.location || "N/A"}</p>
-        <p><strong>Info:</strong> ${data.info || "N/A"}</p>
-      `;
-
-      // Create the "Accept Request" button
-      const acceptButton = document.createElement('button');
-      acceptButton.textContent = 'Accept Request';
-
-      // Create a container for confirmation buttons (check and x)
-      const confirmationContainer = document.createElement('div');
-      confirmationContainer.style.display = 'none'; // hidden by default
-
-      // Create the check button
-      const confirmButton = document.createElement('button');
-      confirmButton.textContent = '✓'; // or use any icon/text you like
-      confirmButton.style.marginRight = '10px';
-
-      // Create the cancel (x) button
-      const cancelButton = document.createElement('button');
-      cancelButton.textContent = 'x';
-
-      // Add them to the container
-      confirmationContainer.appendChild(confirmButton);
-      confirmationContainer.appendChild(cancelButton);
-
-      // Handle "Accept Request" click
-      acceptButton.addEventListener('click', () => {
-        // Hide the accept button
-        acceptButton.style.display = 'none';
-
-        // Show the confirmation buttons
-        confirmationContainer.style.display = 'inline-block';
-      });
-
-      // Handle the "✓" click
-      confirmButton.addEventListener('click', () => {
-        db.collection("Sessions")
-          .add({
-            ...data,
-            "tutor email": email // The tutor’s email from the URL parameter
-          })
-          .then(() => {
-            db.collection("Requests").doc(doc.id).delete()
-              .then(() => {
-                console.log("Document successfully deleted from Requests.");
-                // Remove the note from the DOM
-                note.remove();
-              })
-              .catch((error) => {
-                console.error("Error deleting document from Requests:", error);
-              });
-          })
-          .catch((error) => {
-            console.error("Error adding document to Sessions:", error);
-          });
-      });
-
-      // Handle the "x" click
-      cancelButton.addEventListener('click', () => {
-        // Hide confirmation buttons
-        confirmationContainer.style.display = 'none';
-        // Show the original accept button again
-        acceptButton.style.display = 'inline-block';
-      });
-
-      // Append the accept button to the note
-      note.appendChild(acceptButton);
-
-      // Append the confirmation container after the accept button
-      note.appendChild(confirmationContainer);
-
-      // Finally, append the note to the container
-      requestsContainer.appendChild(note);
-            });
-          }).catch((error) => {
-            console.error("Error getting documents: ", error);
-          });
-      } else {
-          userInfoDiv.textContent = 'No email provided.';
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        // Not signed in — send to signup/login flow
+        window.location.href = 'signup.html';
+        return;
       }
-    </script>
-    <script>
-        // Example: Suppose you have the user's email from your authentication process
-        const userEmail = email;
-        
-        // Construct the URL with the email as a query parameter
-        const accountUrl = "account.html?email=" + encodeURIComponent(userEmail);
-    
-        // Insert the button into the DOM with the correct URL
-        document.write('<a href="' + accountUrl + '" class="my-account-btn">MY ACCOUNT</a>');
-    </script>
+
+      // Signed in: show greeting and load requests
+      userInfoDiv.textContent = `Welcome, ${user.displayName || user.email || 'Tutor'}!`;
+      hide(loading);
+      show(userInfoDiv);
+      show(requestsContainer);
+
+      try {
+        const snap = await getDocs(collection(db, "Requests"));
+        snap.forEach((d) => {
+          const data = d.data();
+          const note = document.createElement('div');
+          note.className = 'post-it';
+
+          note.innerHTML = `
+            <h3>${data.name || "No Name"}</h3>
+            <p><strong>Email:</strong> ${data.email || "N/A"}</p>
+            <p><strong>Grade:</strong> ${data.grade || "N/A"}</p>
+            <p><strong>Subject:</strong> ${data.subject || "N/A"}</p>
+            <p><strong>Class:</strong> ${data.class || "N/A"}</p>
+            <p><strong>Topic:</strong> ${data.topic || "N/A"}</p>
+            <p><strong>Date:</strong> ${data.date || "N/A"}</p>
+            <p><strong>Block:</strong> ${data.block || "N/A"}</p>
+            <p><strong>Location:</strong> ${data.location || "N/A"}</p>
+            <p><strong>Info:</strong> ${data.info || "N/A"}</p>
+          `;
+
+          // Accept flow
+          const acceptButton = document.createElement('button');
+          acceptButton.textContent = 'Accept Request';
+
+          const confirmationContainer = document.createElement('div');
+          confirmationContainer.style.display = 'none';
+
+          const confirmButton = document.createElement('button');
+          confirmButton.textContent = '✓';
+          confirmButton.style.marginRight = '10px';
+
+          const cancelButton = document.createElement('button');
+          cancelButton.textContent = 'x';
+
+          confirmationContainer.appendChild(confirmButton);
+          confirmationContainer.appendChild(cancelButton);
+
+          acceptButton.addEventListener('click', () => {
+            acceptButton.style.display = 'none';
+            confirmationContainer.style.display = 'inline-block';
+          });
+
+          confirmButton.addEventListener('click', async () => {
+            // Guard: ensure still signed in
+            const u = auth.currentUser;
+            if (!u) { window.location.href = 'signup.html'; return; }
+
+            confirmButton.disabled = true;
+            try {
+              await addDoc(collection(db, "Sessions"), {
+                ...data,
+                tutorUid: u.uid,
+                tutorEmail: u.email || null,
+                tutorName: u.displayName || null,
+                acceptedAt: new Date().toISOString()
+              });
+              await deleteDoc(doc(db, "Requests", d.id));
+              note.remove();
+            } catch (err) {
+              console.error("Error moving request to Sessions:", err);
+              confirmButton.disabled = false;
+              // restore UI
+              confirmationContainer.style.display = 'none';
+              acceptButton.style.display = 'inline-block';
+            }
+          });
+
+          cancelButton.addEventListener('click', () => {
+            confirmationContainer.style.display = 'none';
+            acceptButton.style.display = 'inline-block';
+          });
+
+          note.appendChild(acceptButton);
+          note.appendChild(confirmationContainer);
+          requestsContainer.appendChild(note);
+        });
+      } catch (e) {
+        console.error("Error getting documents: ", e);
+      }
+    });
+  </script>
 </body>
 </html>
