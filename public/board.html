@@ -127,7 +127,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import {
-      getFirestore, collection, getDocs, addDoc, deleteDoc, doc, getDoc,
+      getFirestore, collection, getDocs, addDoc, deleteDoc, doc, getDoc, setDoc,
       query, where
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   
@@ -326,6 +326,7 @@
               cycleDay: chosenSlot.cycleDay || null,
               block: chosenSlot.block || null
             },
+            availability: data.availability,
             tutorUid: tutor.uid,
             tutorEmail: tutor.email || null,
             tutorName: tutor.displayName || null,
@@ -348,7 +349,8 @@
     };
   
     // --- Sessions renderer (uses same banner layout for consistency) ---
-    const renderSession = (s) => {
+    const renderSession = (s, opts = {}) => {
+      const { showCancel = false, currentUser = null } = opts;
       const wrap = document.createElement('div');
       wrap.className = 'request-banner';
   
@@ -363,6 +365,54 @@
       `;
   
       wrap.appendChild(left);
+      if (showCancel) {
+   const right = document.createElement('div');
+   right.className = 'right';
+   const cancelBtn = document.createElement('button');
+   cancelBtn.className = 'ghost';
+   cancelBtn.textContent = 'Cancel & Reopen';
+
+   cancelBtn.addEventListener('click', async () => {
+     cancelBtn.disabled = true;
+     try {
+       // Prefer original availability; fall back to normalized; last resort: chosen slot only
+       const availability =
+         s.availability ??
+         (s.slot ? [s.slot] : []);
+
+       const reqData = {
+         name: s.name ?? null,
+         email: s.email ?? null,
+         grade: s.grade ?? null,
+         subject: s.subject ?? null,
+         class: s.class ?? null,
+         topic: s.topic ?? null,
+         location: s.location ?? null,
+         info: s.info ?? null,
+         availability
+       };
+       // If we know the original requestId, restore into the same doc ID.
+       if (s.requestId) {
+         await setDoc(doc(db, 'Requests', s.requestId), reqData);
+       } else {
+         await addDoc(collection(db, 'Requests'), reqData);
+       }
+
+       // Remove the session
+       await deleteDoc(doc(db, 'Sessions', s.id));
+
+       // Quick, reliable UI refresh (rebuilds Upcoming, Open, Completed)
+       window.location.reload();
+     } catch (err) {
+       console.error('Cancel & Reopen error:', err);
+       cancelBtn.disabled = false;
+       alert('Failed to cancel the session. Please try again.');
+     }
+   });
+
+   right.appendChild(cancelBtn);
+   wrap.appendChild(right);
+ }
       return wrap;
     };
 
@@ -464,7 +514,7 @@ async function loadSessions(currentUser) {
     none.textContent = 'No upcoming sessions.';
     sessionsEl.appendChild(none);
   } else {
-    upcoming.forEach((s) => sessionsEl.appendChild(renderSession(s)));
+    upcoming.forEach((s) => sessionsEl.appendChild(renderSession(s, { showCancel: true, currentUser })));
   }
 }
 
@@ -539,7 +589,7 @@ async function loadSessions(currentUser) {
           none.textContent = 'No upcoming sessions.';
           sessionsEl.appendChild(none);
         } else {
-          upcoming.forEach((s) => sessionsEl.appendChild(renderSession(s)));
+          upcoming.forEach((s) => sessionsEl.appendChild(renderSession(s, { showCancel: true, currentUser: user })));
         }
   
         // ========== OPEN REQUESTS ==========
