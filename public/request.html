@@ -307,9 +307,6 @@
           class: classSelection,
           topic, location, info,
           availability: slots, // NEW: array of {date, block}
-          // For backward-compat you can also include first slot:
-          date: slots[0]?.date || null,
-          block: slots[0]?.block || null,
           timestamp: firebase.firestore.FieldValue.serverTimestamp(),
         });
         alert('Request submitted successfully!');
