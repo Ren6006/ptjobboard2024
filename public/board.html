@@ -104,8 +104,8 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
+    import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  
     const firebaseConfig = {
       apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
       authDomain: "ptjobboard2024.firebaseapp.com",
@@ -116,16 +116,16 @@
       appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
       measurementId: "G-PF9F78SKZV"
     };
-
+  
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
     await setPersistence(auth, browserLocalPersistence).catch(()=>{});
-
+  
     const loadingEl = document.getElementById('loading');
     const userInfoEl = document.getElementById('user-info');
     const listEl = document.getElementById('requests');
-
+  
     const blocksCatalog = {
       '1' : 'Block 1',
       'M11' : 'Junior Seminar',
@@ -136,38 +136,46 @@
       'CC': 'CC (3:15-4:00)',
       '4': 'Block 4',
       'M10': 'Soph. Seminar',
-      '5': 'Block 5' ,
+      '5': 'Block 5',
       '6': 'Block 6',
       '7': 'Block 7',
       'FC': 'Faculty Collaboration',
       'M12': 'Senior Seminar',
       'CT': 'Community Time',
-      'OH': 'Office Hours' ,
+      'OH': 'Office Hours',
     };
-
+  
     const fmtDate = (raw) => {
-      // raw may be like '09/22/2025' or ISO; try both
       try {
-        // If it already looks like an ISO string from your earlier page, this handles it too
         const d = new Date(raw);
         if (!isNaN(d)) return d.toLocaleString([], { dateStyle: 'medium' });
       } catch {}
       return String(raw);
     };
-
+  
     const optionLabel = (slot) => {
-      // slot: {date, cycleDay, block, ...}
       const parts = [];
       if (slot?.date) parts.push(fmtDate(slot.date));
       if (slot?.cycleDay) parts.push(`Day ${slot.cycleDay}`);
-      if (slot?.block) parts.push(`${blocksCatalog[slot.block]}`); // HERERERE
+      if (slot?.block) {
+        const pretty = blocksCatalog[slot.block] || `Block ${slot.block}`;
+        parts.push(pretty);
+      }
       return parts.join(" • ") || "Unknown slot";
     };
-
-    const renderRequest = (docId, data, tutor) => {
+  
+    // helper: normalize to "cycleDay_block" e.g. "1_CC"
+    const slotKey = (slot) => {
+      const day = `${slot?.cycleDay ?? ""}`.trim();
+      const blk = `${slot?.block ?? ""}`.trim();
+      if (!day || !blk) return "";
+      return `${day}_${blk}`;
+    };
+  
+    const renderRequest = (docId, data, tutor, matchingSlots) => {
       const wrap = document.createElement('div');
       wrap.className = 'request-banner';
-
+  
       // LEFT — Request details
       const left = document.createElement('div');
       left.className = 'req-col grow';
@@ -179,48 +187,46 @@
         <div class="kv"><span class="k">Location</span><span>${data.location || 'N/A'}</span></div>
         <div class="kv"><span class="k">Info</span><span>${data.info || '—'}</span></div>
       `;
-
-      // RIGHT — Availability selector + Finalize
+  
+      // RIGHT — Availability selector + Finalize (only the matches)
       const right = document.createElement('div');
       right.className = 'right';
-
-      const avail = Array.isArray(data.availability) ? data.availability : [];
+  
       const select = document.createElement('select');
       select.className = 'avail';
       select.ariaLabel = 'Choose availability slot';
-      // placeholder
+  
       const ph = document.createElement('option');
       ph.value = '';
       ph.disabled = true;
       ph.selected = true;
-      ph.textContent = avail.length ? 'Select an availability…' : 'No availability provided';
+      ph.textContent = matchingSlots.length ? 'Select an availability…' : 'No matching availability';
       select.appendChild(ph);
-
-      avail.forEach((slot, idx) => {
+  
+      matchingSlots.forEach((slot, idx) => {
         const opt = document.createElement('option');
         opt.value = String(idx);
         opt.textContent = optionLabel(slot);
         select.appendChild(opt);
       });
-
+  
       const finalizeBtn = document.createElement('button');
       finalizeBtn.className = 'primary';
       finalizeBtn.textContent = 'Finalize';
-
+      finalizeBtn.disabled = matchingSlots.length === 0;
+  
       const cancelBtn = document.createElement('button');
       cancelBtn.className = 'ghost';
       cancelBtn.textContent = 'Dismiss';
-
+  
       right.appendChild(select);
       right.appendChild(finalizeBtn);
       right.appendChild(cancelBtn);
-
-      // Wire buttons
+  
       cancelBtn.addEventListener('click', () => {
-        // collapse UI back to idle; could also hide banner if you want a “soft” dismiss
         select.selectedIndex = 0;
       });
-
+  
       finalizeBtn.addEventListener('click', async () => {
         const chosen = select.value;
         if (!chosen) {
@@ -229,15 +235,13 @@
           return;
         }
         const i = parseInt(chosen, 10);
-        const chosenSlot = avail[i] || {};
-
+        const chosenSlot = matchingSlots[i] || {};
+  
         finalizeBtn.disabled = true;
-
+  
         try {
-          // Create Session with selected slot + tutor identity
           await addDoc(collection(db, 'Sessions'), {
             requestId: docId,
-            // Copy forward relevant request fields
             name: data.name || null,
             email: data.email || null,
             grade: data.grade || null,
@@ -246,40 +250,34 @@
             topic: data.topic || null,
             location: data.location || null,
             info: data.info || null,
-
-            // Selected slot
+  
             slot: {
               date: chosenSlot.date || null,
               cycleDay: chosenSlot.cycleDay || null,
               block: chosenSlot.block || null
             },
-
-            // Tutor info from Auth
+  
             tutorUid: tutor.uid,
             tutorEmail: tutor.email || null,
             tutorName: tutor.displayName || null,
-
-            // Metadata
+  
             createdAt: new Date().toISOString(),
             status: 'scheduled'
           });
-
-          // Remove from Requests
+  
           await deleteDoc(doc(db, 'Requests', docId));
-
-          // Remove banner from UI
           wrap.remove();
         } catch (err) {
           console.error('Finalize error:', err);
           finalizeBtn.disabled = false;
         }
       });
-
+  
       wrap.appendChild(left);
       wrap.appendChild(right);
       return wrap;
     };
-
+  
     onAuthStateChanged(auth, async (user) => {
       if (!user) {
         window.location.href = 'signup.html';
@@ -287,11 +285,23 @@
       }
       userInfoEl.textContent = `Signed in as ${user.displayName || user.email || 'Tutor'}`;
       userInfoEl.classList.remove('hidden');
-
+  
       try {
+        // 1) Load the tutor's availability map from users/{uid}
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+        const availMap = (userSnap.exists() && userSnap.data()?.availability) || {};
+        // Build a Set of allowed keys where value is truthy
+        const myAvailSet = new Set(
+          Object.entries(availMap)
+            .filter(([, v]) => !!v)
+            .map(([k]) => k.trim())
+        );
+  
+        // 2) Load Requests
         const snap = await getDocs(collection(db, 'Requests'));
         loadingEl.classList.add('hidden');
-
+  
         if (snap.empty) {
           const none = document.createElement('div');
           none.id = 'empty';
@@ -299,22 +309,45 @@
           listEl.appendChild(none);
           return;
         }
-
+  
+        let renderedCount = 0;
+  
         snap.forEach((d) => {
           const data = d.data() || {};
-          // Normalize older schemas just in case (availability could be object map or array)
-          if (data.availability && !Array.isArray(data.availability) && typeof data.availability === 'object') {
-            // Convert map of keys -> {block, cycleDay, date} into array
-            data.availability = Object.values(data.availability);
+          // Normalize availability into array of {date, cycleDay, block}
+          let slots = [];
+          if (Array.isArray(data.availability)) {
+            slots = data.availability;
+          } else if (data.availability && typeof data.availability === 'object') {
+            slots = Object.values(data.availability);
           }
-          const banner = renderRequest(d.id, data, user);
-          listEl.appendChild(banner);
+  
+          // 3) Keep only slots that match the tutor's availability
+          const matchingSlots = slots.filter((s) => {
+            const key = slotKey(s);
+            return key && myAvailSet.has(key);
+          });
+  
+          // 4) Only render if there's at least one match
+          if (matchingSlots.length > 0) {
+            const banner = renderRequest(d.id, data, user, matchingSlots);
+            listEl.appendChild(banner);
+            renderedCount++;
+          }
         });
+  
+        if (renderedCount === 0) {
+          const none = document.createElement('div');
+          none.id = 'empty';
+          none.textContent = 'No open requests that match your availability.';
+          listEl.appendChild(none);
+        }
       } catch (e) {
         loadingEl.textContent = 'Failed to load requests.';
         console.error(e);
       }
     });
   </script>
+  
 </body>
 </html>
