@@ -16,6 +16,7 @@
         height: 100vh;
         font-family: "Montserrat", sans-serif;
         background-color: #f4f4f4;
+        overflow-x: hidden; /* avoid horizontal scroll on tiny screens */
       }
 
       /* Title styling */
@@ -32,9 +33,13 @@
         border-radius: 15px;
         box-shadow: 0 6px 9px rgba(0, 0, 0, 0.1);
         margin: 40px 16px;
-        width: min(450px, 92vw);
+        width: min(
+          450px,
+          calc(100vw - 32px)
+        ); /* account for 16px side margins */
         padding: 28px 20px;
         text-align: center;
+        box-sizing: border-box; /* prevent padding from causing overflow */
       }
 
       /* Button styling */
@@ -53,6 +58,7 @@
         cursor: pointer;
         transition: all 0.3s ease;
         width: 100%;
+        box-sizing: border-box; /* include padding in width to avoid overflow */
       }
 
       .button:hover {
