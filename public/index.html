@@ -1,93 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PEER TUTORING BOARD</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PEER TUTORING JOB BOARD</title>
+    <script src="common-auth.js"></script>
     <style>
-        /* General body styling */
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            margin: 0;
-            height: 100vh;
-            font-family: 'Montserrat', sans-serif;
-            background-color: #f4f4f4;
-        }
+      /* General body styling */
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        margin: 0;
+        height: 100vh;
+        font-family: "Montserrat", sans-serif;
+        background-color: #f4f4f4;
+      }
 
-        /* Title styling */
-        h1 {
-            font-size: 3rem;
-            color: #333;
-            margin: 30px 0 20px; /* Pushes the title to the top */
-            text-align: center;
-        }
+      /* Title styling */
+      h1 {
+        font-size: 3rem;
+        color: #333;
+        margin: 30px 0 20px; /* Pushes the title to the top */
+        text-align: center;
+      }
 
-        /* Container for the box */
+      /* Container for the box */
+      .box {
+        background-color: white;
+        border-radius: 15px;
+        box-shadow: 0 6px 9px rgba(0, 0, 0, 0.1);
+        margin: 40px 16px;
+        width: min(450px, 92vw);
+        padding: 28px 20px;
+        text-align: center;
+      }
+
+      /* Button styling */
+      .button {
+        display: block;
+        padding: 18px;
+        margin: 16px 0;
+        font-size: 1.25rem;
+        font-weight: bold;
+        color: white !important; /* White text on buttons */
+        background-color: #007bff;
+        border: none;
+        border-radius: 8px;
+        text-align: center;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        width: 100%;
+      }
+
+      .button:hover {
+        background-color: #0056b3;
+      }
+
+      /* Spacing below the buttons */
+      .box p {
+        margin-top: 16px;
+        font-size: 1rem;
+        color: #555;
+      }
+
+      /* Link styling */
+      .box a {
+        color: #007bff;
+        text-decoration: none;
+        font-weight: bold;
+      }
+
+      .box a:hover {
+        text-decoration: underline;
+      }
+
+      /* Larger screens: scale up spacing and text */
+      @media (min-width: 700px) {
         .box {
-            background-color: white;
-            border-radius: 15px;
-            box-shadow: 0 6px 9px rgba(0, 0, 0, 0.1);
-            margin: 150px 0;
-            width: 450px;
-            padding: 45px 30px;
-            text-align: center;
+          margin: 100px auto;
+          padding: 45px 30px;
+          width: 450px;
         }
-
-        /* Button styling */
         .button {
-            display: block;
-            padding: 22px;
-            margin: 30px 0;
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: white !important; /* White text on buttons */
-            background-color: #007BFF;
-            border: none;
-            border-radius: 8px;
-            text-align: center;
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            width: calc(100% - 60px); /* Equal spacing from box edges */
+          padding: 22px;
+          margin: 24px 0;
+          font-size: 1.5rem;
         }
-
-        .button:hover {
-            background-color: #0056b3;
-        }
-
-        /* Spacing below the buttons */
         .box p {
-            margin-top: 30px;
-            font-size: 1.2rem;
-            color: #555;
+          margin-top: 24px;
+          font-size: 1.2rem;
         }
-
-        /* Link styling */
-        .box a {
-            color: #007BFF;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        .box a:hover {
-            text-decoration: underline;
-        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <!-- Title at the top of the page -->
     <h1>PEER TUTORING JOB BOARD</h1>
-    
+
     <!-- Container for the buttons and additional text -->
     <div class="box">
-        <!-- Buttons -->
-        <a href="request.html" class="button">I'm a student!</a>
-        <a href="signin.html" class="button">I'm a tutor!</a>
-        <a href="admin.html" class="button">I'm an admin!</a>
-        
+      <!-- Buttons -->
+      <a href="request.html" class="button">I'm a student!</a>
+      <a href="signin.html" class="button">I'm a tutor!</a>
+      <a href="admin.html" class="button">I'm an admin!</a>
     </div>
-</body>
+  </body>
 </html>

@@ -1,427 +1,769 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Submit a Tutoring Request</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      margin: 0; background: #f4f4f9; color: #222;
-      display: flex; align-items: center; justify-content: center; min-height: 100vh;
-    }
-    h1 { font-size: 2rem; text-align: center; margin: 12px 0 8px; }
-    .form-container {
-      width: min(820px, 96vw); background: #fff; border-radius: 10px;
-      padding: 28px; box-shadow: 0 10px 30px rgba(0,0,0,.08);
-    }
-    form { display: grid; gap: 14px; }
-    input[type="text"], select, button {
-      width: 100%; padding: 12px 14px; font-size: 16px; border-radius: 8px; border: 1px solid #d8dbe2;
-      background: #fff;
-    }
-    select { background: #f6f4ec; }
-    button[type="submit"] { background: #0e63ff; color: #fff; border: none; }
-    button[type="submit"]:hover { filter: brightness(.95); }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Submit a Tutoring Request</title>
+    <script src="common-auth.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        margin: 0;
+        background: #f4f4f9;
+        color: #222;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      h1 {
+        font-size: 2rem;
+        text-align: center;
+        margin: 12px 0 8px;
+      }
+      .form-container {
+        width: min(820px, 96vw);
+        background: #fff;
+        border-radius: 10px;
+        padding: 28px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      }
+      form {
+        display: grid;
+        gap: 14px;
+      }
+      input[type="text"],
+      select,
+      button {
+        width: 100%;
+        padding: 12px 14px;
+        font-size: 16px;
+        border-radius: 8px;
+        border: 1px solid #d8dbe2;
+        background: #fff;
+      }
+      select {
+        background: #f6f4ec;
+      }
+      button[type="submit"] {
+        background: #0e63ff;
+        color: #fff;
+        border: none;
+      }
+      button[type="submit"]:hover {
+        filter: brightness(0.95);
+      }
 
-    /* Availability (date + block) picker */
-    .availability {
-      margin-top: 4px; border: 1px solid #e5e7ef; border-radius: 10px; padding: 14px;
-      background: #fafbff;
-    }
-    .availability header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .availability header h3 { margin: 0; font-size: 1rem; color: #1f2a44; }
-    .chip-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
-    .chip {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: #eef2ff; border: 1px solid #c7d2fe; color: #1e40af; padding: 6px 10px; border-radius: 999px;
-      font-size: 14px;
-    }
-    .chip button { border: 0; background: transparent; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
-    .add-slot {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      width: auto; padding: 10px 12px; border: 1px dashed #9aa4c1; color: #243353; background: #fff; cursor: pointer;
-    }
-    .add-slot:hover { background: #f1f5ff; }
+      /* Availability (date + block) picker */
+      .availability {
+        margin-top: 4px;
+        border: 1px solid #e5e7ef;
+        border-radius: 10px;
+        padding: 14px;
+        background: #fafbff;
+      }
+      .availability header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .availability header h3 {
+        margin: 0;
+        font-size: 1rem;
+        color: #1f2a44;
+      }
+      .chip-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #eef2ff;
+        border: 1px solid #c7d2fe;
+        color: #1e40af;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 14px;
+      }
+      .chip button {
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 2px;
+      }
+      .add-slot {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: auto;
+        padding: 10px 12px;
+        border: 1px dashed #9aa4c1;
+        color: #243353;
+        background: #fff;
+        cursor: pointer;
+      }
+      .add-slot:hover {
+        background: #f1f5ff;
+      }
 
-    /* Modal */
-    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; padding: 20px; }
-    .modal.open { display: flex; }
-    .card {
-      width: min(720px, 96vw); background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.2);
-    }
-    .card header { padding: 14px 16px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; }
-    .card header h4 { margin: 0; font-size: 1.05rem; }
-    .card .body { padding: 14px 16px; }
-    .row { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
-    .row label { display: block; font-size: 12px; color: #5b667a; margin-bottom: 6px; }
-    input[type="date"] { background: #fff; border: 1px solid #d8dbe2; }
+      /* Modal */
+      .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.35);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .modal.open {
+        display: flex;
+      }
+      .card {
+        width: min(720px, 96vw);
+        background: #fff;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+      }
+      .card header {
+        padding: 14px 16px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .card header h4 {
+        margin: 0;
+        font-size: 1.05rem;
+      }
+      .card .body {
+        padding: 14px 16px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+      .row label {
+        display: block;
+        font-size: 12px;
+        color: #5b667a;
+        margin-bottom: 6px;
+      }
+      input[type="date"] {
+        background: #fff;
+        border: 1px solid #d8dbe2;
+      }
 
-        /* Hide the native date input but keep it in the DOM for the picker */
-    #slotDate {
-      position: absolute !important;
-      width: 1px; height: 1px;
-      margin: -1px; padding: 0; border: 0;
-      clip: rect(0 0 0 0); overflow: hidden;
-    }
+      /* Hide the native date input but keep it in the DOM for the picker */
+      #slotDate {
+        position: absolute !important;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        border: 0;
+        clip: rect(0 0 0 0);
+        overflow: hidden;
+      }
 
-    /* Big calendar trigger button */
-    .calendar-btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-      width: 64px; height: 64px;
-      border: 2px solid #cbd5e1; border-radius: 12px;
-      background: #fff; cursor: pointer; font-size: 28px;
-    }
-    .calendar-btn:hover { background: #f1f5f9; }
-    .calendar-btn .label {
-      font-size: 14px; color: #334155; margin-left: 10px; white-space: nowrap;
-    }
-    .date-control { display: flex; align-items: center; gap: 10px; }
+      /* Big calendar trigger button */
+      .calendar-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 64px;
+        height: 64px;
+        border: 2px solid #cbd5e1;
+        border-radius: 12px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 28px;
+      }
+      .calendar-btn:hover {
+        background: #f1f5f9;
+      }
+      .calendar-btn .label {
+        font-size: 14px;
+        color: #334155;
+        margin-left: 10px;
+        white-space: nowrap;
+      }
+      .date-control {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
 
+      .schedule {
+        border: 1px solid #e5e7ef;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .schedule table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .schedule td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #f0f2f7;
+        font-size: 14px;
+      }
+      .schedule tr:last-child td {
+        border-bottom: 0;
+      }
+      .schedule .code {
+        font-weight: 700;
+        width: 96px;
+      }
+      .schedule .time {
+        white-space: nowrap;
+        color: #334155;
+      }
+      .schedule .pick {
+        text-align: right;
+      }
+      .schedule .btn {
+        border: 1px solid #cbd5e1;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+      }
+      .schedule .btn:hover {
+        background: #f1f5f9;
+      }
+      .muted {
+        color: #94a3b8;
+      }
 
-    .schedule { border: 1px solid #e5e7ef; border-radius: 10px; overflow: hidden; }
-    .schedule table { width: 100%; border-collapse: collapse; }
-    .schedule td { padding: 10px 12px; border-bottom: 1px solid #f0f2f7; font-size: 14px; }
-    .schedule tr:last-child td { border-bottom: 0; }
-    .schedule .code { font-weight: 700; width: 96px; }
-    .schedule .time { white-space: nowrap; color: #334155; }
-    .schedule .pick { text-align: right; }
-    .schedule .btn { border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 8px; background: #fff; cursor: pointer; }
-    .schedule .btn:hover { background: #f1f5f9; }
-    .muted { color: #94a3b8; }
+      .empty {
+        text-align: center;
+        padding: 18px;
+        color: #64748b;
+      }
 
-    .empty { text-align: center; padding: 18px; color: #64748b; }
+      .schedule.btn:hover {
+        background-color: rgba(0, 0, 0, 0.08); /* light gray shade */
+      }
 
-    .schedule.btn:hover {
-      background-color: rgba(0,0,0,0.08); /* light gray shade */
-    }
+      /* Mobile-friendly: stack columns and ensure the date picker opens on touch */
+      @media (max-width: 600px) {
+        .row {
+          grid-template-columns: 1fr;
+        }
+        .calendar-btn {
+          width: 56px;
+          height: 56px;
+          font-size: 24px;
+        }
+      }
 
-    
-  </style>
-</head>
-<body>
-  <div class="form-container">
-    <h1>Submit a Tutoring Request!</h1>
-    <form id="requestForm">
-      <input type="text" placeholder="Name (First and Last)" id="name" />
-      <input type="text" placeholder="School Email (@hwemail.com)" id="email" />
-      <select id="grade">
-        <option selected value="" disabled>↓ Select a grade</option>
-        <option value="10">10th Grade</option>
-        <option value="11">11th Grade</option>
-        <option value="12">12th Grade</option>
-      </select>
-      <select id="subject">
-        <option selected value="" disabled>↓ Select a subject</option>
-        <option>Math</option>
-        <option>Science</option>
-        <option>English</option>
-        <option>History</option>
-        <option>World Language</option>
-        <option>Computer Science</option>
-        <option>Other</option>
-      </select>
-      <select id="class">
-        <option value="" disabled selected>↓ Select a class (Pick a subject first!)</option>
-      </select>
-      <input id="topic" type="text" placeholder="Topic (e.g. Factoring, Precipitation, Research Project, etc.)" />
+      /* On coarse pointers (touch), place an invisible date input over the calendar button
+       so tapping reliably opens the native picker on iOS/Android */
+      @media (pointer: coarse) {
+        .date-control {
+          position: relative;
+        }
+        #slotDate {
+          position: absolute !important;
+          left: 0;
+          top: 0;
+          width: 64px;
+          height: 64px;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          clip: auto;
+          overflow: hidden;
+          opacity: 0;
+          z-index: 2; /* clickable but invisible */
+        }
+        .calendar-btn {
+          position: relative;
+          z-index: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="form-container">
+      <h1>Submit a Tutoring Request!</h1>
+      <form id="requestForm">
+        <input type="text" placeholder="Name (First and Last)" id="name" />
+        <input
+          type="text"
+          placeholder="School Email (@hwemail.com)"
+          id="email"
+        />
+        <select id="grade">
+          <option selected value="" disabled>↓ Select a grade</option>
+          <option value="10">10th Grade</option>
+          <option value="11">11th Grade</option>
+          <option value="12">12th Grade</option>
+        </select>
+        <select id="subject">
+          <option selected value="" disabled>↓ Select a subject</option>
+          <option>Math</option>
+          <option>Science</option>
+          <option>English</option>
+          <option>History</option>
+          <option>World Language</option>
+          <option>Computer Science</option>
+          <option>Other</option>
+        </select>
+        <select id="class">
+          <option value="" disabled selected>
+            ↓ Select a class (Pick a subject first!)
+          </option>
+        </select>
+        <input
+          id="topic"
+          type="text"
+          placeholder="Topic (e.g. Factoring, Precipitation, Research Project, etc.)"
+        />
 
-      <!-- NEW: Availability picker replaces Date & Block inputs -->
-      <div class="availability">
+        <!-- NEW: Availability picker replaces Date & Block inputs -->
+        <div class="availability">
+          <header>
+            <h3>Available blocks</h3>
+            <button type="button" id="addSlotBtn" class="add-slot">
+              + Add date & block
+            </button>
+          </header>
+          <div id="chips" class="chip-wrap" aria-live="polite"></div>
+          <input type="hidden" id="availabilityJson" />
+        </div>
+
+        <input
+          id="location"
+          type="text"
+          placeholder='Location (Leave blank for Learning Center, "Virtual" for Zoom)'
+        />
+        <input id="info" type="text" placeholder="Additional Information" />
+        <button type="submit">Submit</button>
+      </form>
+    </div>
+
+    <!-- Modal for picking date then block -->
+    <div
+      id="slotModal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="slotTitle"
+    >
+      <div class="card">
         <header>
-          <h3>Available blocks</h3>
-          <button type="button" id="addSlotBtn" class="add-slot">+ Add date & block</button>
+          <h4 id="slotTitle">Pick a date, then choose a block</h4>
+          <button type="button" id="closeModal" class="schedule btn">
+            Close
+          </button>
         </header>
-        <div id="chips" class="chip-wrap" aria-live="polite"></div>
-        <input type="hidden" id="availabilityJson" />
-      </div>
+        <div class="body">
+          <div class="row" style="margin-bottom: 12px">
+            <div>
+              <label for="slotDate">Date</label>
 
-      <input id="location" type="text" placeholder='Location (Leave blank for Learning Center, "Virtual" for Zoom)' />
-      <input id="info" type="text" placeholder="Additional Information" />
-      <button type="submit">Submit</button>
-    </form>
-  </div>
+              <div class="date-control">
+                <!-- kept for native picker & change events, but visually hidden by CSS -->
+                <input type="date" id="slotDate" />
 
-  <!-- Modal for picking date then block -->
-  <div id="slotModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="slotTitle">
-    <div class="card">
-      <header>
-        <h4 id="slotTitle">Pick a date, then choose a block</h4>
-        <button type="button" id="closeModal" class="schedule btn">Close</button>
-      </header>
-      <div class="body">
-        <div class="row" style="margin-bottom: 12px;">
-          <div>
-            <label for="slotDate">Date</label>
+                <!-- big calendar button that opens the picker -->
+                <button
+                  type="button"
+                  id="calendarBtn"
+                  class="calendar-btn"
+                  aria-label="Choose date"
+                >
+                  📅
+                </button>
 
-            <div class="date-control">
-              <!-- kept for native picker & change events, but visually hidden by CSS -->
-              <input type="date" id="slotDate" />
+                <!-- optional: live text showing the picked date -->
+                <span id="calendarBtnLabel" class="label">Pick a date</span>
+              </div>
 
-              <!-- big calendar button that opens the picker -->
-              <button type="button" id="calendarBtn" class="calendar-btn" aria-label="Choose date">
-                📅
-              </button>
-
-              <!-- optional: live text showing the picked date -->
-              <span id="calendarBtnLabel" class="label">Pick a date</span>
+              <div id="dayLabel" class="muted" style="margin-top: 6px"></div>
             </div>
-
-            <div id="dayLabel" class="muted" style="margin-top: 6px;"></div>
-
-          </div>
-          <div>
-            <label>Schedule</label>
-            <div id="scheduleWrap" class="schedule">
-              <div class="empty">Pick a date to load the schedule…</div>
+            <div>
+              <label>Schedule</label>
+              <div id="scheduleWrap" class="schedule">
+                <div class="empty">Pick a date to load the schedule…</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
-  <script>
-    // ===== Firebase =====
-    const firebaseConfig = {
-      apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
-      authDomain: "ptjobboard2024.firebaseapp.com",
-      databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-      projectId: "ptjobboard2024",
-      storageBucket: "ptjobboard2024.firebasestorage.app",
-      messagingSenderId: "401143229772",
-      appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-      measurementId: "G-PF9F78SKZV"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    <script>
+      // ===== Firebase =====
+      const firebaseConfig = {
+        apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
+        authDomain: "ptjobboard2024.firebaseapp.com",
+        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
+        projectId: "ptjobboard2024",
+        storageBucket: "ptjobboard2024.firebasestorage.app",
+        messagingSenderId: "401143229772",
+        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
+        measurementId: "G-PF9F78SKZV",
+      };
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
 
-    // ===== Class options (unchanged) =====
-    const subjectChoice = document.getElementById("subject");
-    const classSelect = document.getElementById("class");
-    const options = {
-      math: ["Geometry","Advanced Geometry","Honors Geometry","Algebra II","Advanced Algebra II","Honors Algebra II","Precalculus","Advanced Precalculus","Honors Precalculus","AP Calculus AB","AP Calculus BC","Linear Algebra","Other"],
-      science: ["Chemistry","Honors Chemistry","AP Chemistry","Physics I","Honors Physics I","AP Physics C: Mechanics","AP Physics C: Electricity & Magnetism","AP Environmental Sciences","Other"],
-      history: ["Rise of The Modern World","ROTW Art History","Thematic US History","Honors US History","Other"],
-      english: ["English II","English III","Honors English III","Other"],
-      "world language": ["Spanish II","Honors Spanish II","Spanish III","Honors Spanish III","Spanish IV","AP Spanish","French II","Honors French II","French III","Honors French III","French IV","Latin II","Latin III","Honors Latin III","Latin IV","AP Latin","Chinese II","Chinese III","Honors Chinese III","Chinese IV","Other"],
-      "computer science": ["Advanced Computer Science","Design and Data Structures"],
-      other: ["Other"],
-    };
-    subjectChoice.addEventListener("change", () => {
-      const s = subjectChoice.value?.toLowerCase();
-      classSelect.innerHTML = '<option value="" disabled selected>↓ Select a class</option>';
-      (options[s]||[]).forEach(t=>{
-        const o=document.createElement('option'); o.value=t; o.textContent=t; classSelect.appendChild(o);
+      // ===== Class options (unchanged) =====
+      const subjectChoice = document.getElementById("subject");
+      const classSelect = document.getElementById("class");
+      const options = {
+        math: [
+          "Geometry",
+          "Advanced Geometry",
+          "Honors Geometry",
+          "Algebra II",
+          "Advanced Algebra II",
+          "Honors Algebra II",
+          "Precalculus",
+          "Advanced Precalculus",
+          "Honors Precalculus",
+          "AP Calculus AB",
+          "AP Calculus BC",
+          "Linear Algebra",
+          "Other",
+        ],
+        science: [
+          "Chemistry",
+          "Honors Chemistry",
+          "AP Chemistry",
+          "Physics I",
+          "Honors Physics I",
+          "AP Physics C: Mechanics",
+          "AP Physics C: Electricity & Magnetism",
+          "AP Environmental Sciences",
+          "Other",
+        ],
+        history: [
+          "Rise of The Modern World",
+          "ROTW Art History",
+          "Thematic US History",
+          "Honors US History",
+          "Other",
+        ],
+        english: ["English II", "English III", "Honors English III", "Other"],
+        "world language": [
+          "Spanish II",
+          "Honors Spanish II",
+          "Spanish III",
+          "Honors Spanish III",
+          "Spanish IV",
+          "AP Spanish",
+          "French II",
+          "Honors French II",
+          "French III",
+          "Honors French III",
+          "French IV",
+          "Latin II",
+          "Latin III",
+          "Honors Latin III",
+          "Latin IV",
+          "AP Latin",
+          "Chinese II",
+          "Chinese III",
+          "Honors Chinese III",
+          "Chinese IV",
+          "Other",
+        ],
+        "computer science": [
+          "Advanced Computer Science",
+          "Design and Data Structures",
+        ],
+        other: ["Other"],
+      };
+      subjectChoice.addEventListener("change", () => {
+        const s = subjectChoice.value?.toLowerCase();
+        classSelect.innerHTML =
+          '<option value="" disabled selected>↓ Select a class</option>';
+        (options[s] || []).forEach((t) => {
+          const o = document.createElement("option");
+          o.value = t;
+          o.textContent = t;
+          classSelect.appendChild(o);
+        });
       });
-    });
 
-    // Keep track of the selected date's cycle day (from XML)
-    let selectedCycleDay = "";
+      // Keep track of the selected date's cycle day (from XML)
+      let selectedCycleDay = "";
 
-    // Safe getter for possible tag names in the HW XML
-    function getFirstTagText(node, tagNames = []) {
-      for (const t of tagNames) {
-        const el = node.getElementsByTagName(t)[0];
-        if (el && el.textContent) return el.textContent.trim();
-      }
-      return "";
-    }
-    const blocksCatalog = {
-      '1' : 'Block 1',
-      'M11' : 'Junior Seminar',
-      '2' : 'Block 2',
-      'L' : 'Lunch',
-      '3' : 'Block 3',
-      'DS': 'DS',
-      'CC': 'CC (3:15-4:00)',
-      '4': 'Block 4',
-      'M10': 'Soph. Seminar',
-      '5': 'Block 5',
-      '6': 'Block 6',
-      '7': 'Block 7',
-      'FC': 'Faculty Collaboration',
-      'M12': 'Senior Seminar',
-      'CT': 'Community Time',
-      'OH': 'Office Hours',
-    };
-
-
-    // ===== Availability picker state =====
-    const slots = []; // {date: 'MM/DD/YYYY', block: '1' | 'M11' | 'L' | ..., cycleDay: '1' | '2' | ...}
-    const chips = document.getElementById('chips');
-    const availabilityJson = document.getElementById('availabilityJson');
-    function syncHiddenField(){ availabilityJson.value = JSON.stringify(slots); }
-    function renderChips(){
-      chips.innerHTML = '';
-      if(!slots.length){
-        const p=document.createElement('div'); p.className='muted'; p.textContent='No blocks added yet.'; chips.appendChild(p);
-        return;
-      }
-      slots.forEach((s,idx)=>{
-        const chip=document.createElement('span'); chip.className='chip';
-        chip.innerHTML = `${s.date}<strong>${s.block}</strong> <button aria-label="Remove" data-idx="${idx}">×</button>`;
-        chip.querySelector('button').addEventListener('click', (e)=>{ slots.splice(idx,1); renderChips(); syncHiddenField(); });
-        chips.appendChild(chip);
-      });
-    }
-    renderChips();
-
-    // ===== Modal open/close =====
-    const modal = document.getElementById('slotModal');
-    const addSlotBtn = document.getElementById('addSlotBtn');
-    const closeModalBtn = document.getElementById('closeModal');
-    const slotDate = document.getElementById('slotDate');
-    const calendarBtn = document.getElementById('calendarBtn');
-    const calendarBtnLabel = document.getElementById('calendarBtnLabel');
-    const scheduleWrap = document.getElementById('scheduleWrap');
-    const dayLabel = document.getElementById('dayLabel');
-
-    addSlotBtn.addEventListener('click', ()=>{ modal.classList.add('open'); slotDate.value=''; scheduleWrap.innerHTML='<div class="empty">Pick a date to load the schedule…</div>'; dayLabel.textContent=''; });
-    closeModalBtn.addEventListener('click', ()=> modal.classList.remove('open'));
-    modal.addEventListener('click', (e)=>{ if(e.target===modal) modal.classList.remove('open'); });
-
-    // ===== Schedule loader (Upper School by default) =====
-    const CAMPUS = 'US';
-    let xmlCache = null;
-    async function fetchXml(){
-      if(xmlCache) return xmlCache;
-      const url = `https://www.hw.com/portals/0/reports/DailySchedules${CAMPUS}.xml?t=${Math.random()}`;
-      const res = await fetch(url); const text = await res.text();
-      const xml = new window.DOMParser().parseFromString(text, 'text/xml');
-      xmlCache = xml; return xml;
-    }
-    function toMMDDYYYY(iso) {
-    // If it's the YYYY-MM-DD from <input type="date">, parse it directly to avoid TZ shifts
-    if (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-      const [y, m, d] = iso.split('-');
-      return m + '/' + d + '/' + y; // MM/DD/YYYY
-    }
-    // Fallback (handles Date objects or other date-like inputs)
-    const dt = new Date(iso);
-    const mm = String(dt.getMonth() + 1).padStart(2, '0');
-    const dd = String(dt.getDate()).padStart(2, '0');
-    const yyyy = dt.getFullYear();
-    return mm + '/' + dd + '/' + yyyy;
-  }
-
-    function twelveHr(hhmm){
-      // expects "H:MM AM/PM" or "HH:MM AM/PM" as in source after trimming prefix
-      return hhmm.replace(':00 AM',' AM').replace(':00 PM',' PM');
-    }
-    function extractTime(raw){ return raw.replace('1/1/1900 ',''); }
-
-    function buildScheduleTable(day){
-      const periods = Array.from(day.getElementsByTagName('Period'));
-      if(!periods.length){ scheduleWrap.innerHTML = '<div class="empty">No schedule for this day.</div>'; return; }
-      const table = document.createElement('table');
-      periods.forEach(p=>{
-        const code = p.getElementsByTagName('PeriodCode')[0].textContent.trim();
-        const start = twelveHr(extractTime(p.getElementsByTagName('StartTime')[0].textContent));
-        const end = twelveHr(extractTime(p.getElementsByTagName('EndTime')[0].textContent));
-        if (code in blocksCatalog){
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td class="code">${code}</td><td class="time">${start} – ${end}</td><td class="pick"><button class="btn" data-code="${code}">Add</button></td>`;
-          table.appendChild(tr);
+      // Safe getter for possible tag names in the HW XML
+      function getFirstTagText(node, tagNames = []) {
+        for (const t of tagNames) {
+          const el = node.getElementsByTagName(t)[0];
+          if (el && el.textContent) return el.textContent.trim();
         }
-      });
-      scheduleWrap.innerHTML=''; scheduleWrap.appendChild(table);
-      scheduleWrap.querySelectorAll('button[data-code]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const d = toMMDDYYYY(slotDate.value);
-          const block = btn.getAttribute('data-code');
-          // prevent exact duplicates
-          if(!slots.find(s=>s.date===d && s.block===block)){
-            slots.push({date: d, block, cycleDay: selectedCycleDay });
-            renderChips(); 
+        return "";
+      }
+      const blocksCatalog = {
+        1: "Block 1",
+        M11: "Junior Seminar",
+        2: "Block 2",
+        L: "Lunch",
+        3: "Block 3",
+        DS: "DS",
+        CC: "CC (3:15-4:00)",
+        4: "Block 4",
+        M10: "Soph. Seminar",
+        5: "Block 5",
+        6: "Block 6",
+        7: "Block 7",
+        FC: "Faculty Collaboration",
+        M12: "Senior Seminar",
+        CT: "Community Time",
+        OH: "Office Hours",
+      };
+
+      // ===== Availability picker state =====
+      const slots = []; // {date: 'MM/DD/YYYY', block: '1' | 'M11' | 'L' | ..., cycleDay: '1' | '2' | ...}
+      const chips = document.getElementById("chips");
+      const availabilityJson = document.getElementById("availabilityJson");
+      function syncHiddenField() {
+        availabilityJson.value = JSON.stringify(slots);
+      }
+      function renderChips() {
+        chips.innerHTML = "";
+        if (!slots.length) {
+          const p = document.createElement("div");
+          p.className = "muted";
+          p.textContent = "No blocks added yet.";
+          chips.appendChild(p);
+          return;
+        }
+        slots.forEach((s, idx) => {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.innerHTML = `${s.date}<strong>${s.block}</strong> <button aria-label="Remove" data-idx="${idx}">×</button>`;
+          chip.querySelector("button").addEventListener("click", (e) => {
+            slots.splice(idx, 1);
+            renderChips();
             syncHiddenField();
-            // Update this button: show check mark & disable
-            btn.textContent = "✓";
-            btn.disabled = true;
+          });
+          chips.appendChild(chip);
+        });
+      }
+      renderChips();
+
+      // ===== Modal open/close =====
+      const modal = document.getElementById("slotModal");
+      const addSlotBtn = document.getElementById("addSlotBtn");
+      const closeModalBtn = document.getElementById("closeModal");
+      const slotDate = document.getElementById("slotDate");
+      const calendarBtn = document.getElementById("calendarBtn");
+      const calendarBtnLabel = document.getElementById("calendarBtnLabel");
+      const scheduleWrap = document.getElementById("scheduleWrap");
+      const dayLabel = document.getElementById("dayLabel");
+
+      addSlotBtn.addEventListener("click", () => {
+        modal.classList.add("open");
+        slotDate.value = "";
+        scheduleWrap.innerHTML =
+          '<div class="empty">Pick a date to load the schedule…</div>';
+        dayLabel.textContent = "";
+      });
+      closeModalBtn.addEventListener("click", () =>
+        modal.classList.remove("open")
+      );
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) modal.classList.remove("open");
+      });
+
+      // ===== Schedule loader (Upper School by default) =====
+      const CAMPUS = "US";
+      let xmlCache = null;
+      async function fetchXml() {
+        if (xmlCache) return xmlCache;
+        const url = `https://www.hw.com/portals/0/reports/DailySchedules${CAMPUS}.xml?t=${Math.random()}`;
+        const res = await fetch(url);
+        const text = await res.text();
+        const xml = new window.DOMParser().parseFromString(text, "text/xml");
+        xmlCache = xml;
+        return xml;
+      }
+      function toMMDDYYYY(iso) {
+        // If it's the YYYY-MM-DD from <input type="date">, parse it directly to avoid TZ shifts
+        if (typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+          const [y, m, d] = iso.split("-");
+          return m + "/" + d + "/" + y; // MM/DD/YYYY
+        }
+        // Fallback (handles Date objects or other date-like inputs)
+        const dt = new Date(iso);
+        const mm = String(dt.getMonth() + 1).padStart(2, "0");
+        const dd = String(dt.getDate()).padStart(2, "0");
+        const yyyy = dt.getFullYear();
+        return mm + "/" + dd + "/" + yyyy;
+      }
+
+      function twelveHr(hhmm) {
+        // expects "H:MM AM/PM" or "HH:MM AM/PM" as in source after trimming prefix
+        return hhmm.replace(":00 AM", " AM").replace(":00 PM", " PM");
+      }
+      function extractTime(raw) {
+        return raw.replace("1/1/1900 ", "");
+      }
+
+      function buildScheduleTable(day) {
+        const periods = Array.from(day.getElementsByTagName("Period"));
+        if (!periods.length) {
+          scheduleWrap.innerHTML =
+            '<div class="empty">No schedule for this day.</div>';
+          return;
+        }
+        const table = document.createElement("table");
+        periods.forEach((p) => {
+          const code = p
+            .getElementsByTagName("PeriodCode")[0]
+            .textContent.trim();
+          const start = twelveHr(
+            extractTime(p.getElementsByTagName("StartTime")[0].textContent)
+          );
+          const end = twelveHr(
+            extractTime(p.getElementsByTagName("EndTime")[0].textContent)
+          );
+          if (code in blocksCatalog) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td class="code">${code}</td><td class="time">${start} – ${end}</td><td class="pick"><button class="btn" data-code="${code}">Add</button></td>`;
+            table.appendChild(tr);
           }
         });
+        scheduleWrap.innerHTML = "";
+        scheduleWrap.appendChild(table);
+        scheduleWrap.querySelectorAll("button[data-code]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const d = toMMDDYYYY(slotDate.value);
+            const block = btn.getAttribute("data-code");
+            // prevent exact duplicates
+            if (!slots.find((s) => s.date === d && s.block === block)) {
+              slots.push({ date: d, block, cycleDay: selectedCycleDay });
+              renderChips();
+              syncHiddenField();
+              // Update this button: show check mark & disable
+              btn.textContent = "✓";
+              btn.disabled = true;
+            }
+          });
+        });
+      }
+
+      slotDate.addEventListener("change", async () => {
+        if (!slotDate.value) {
+          return;
+        }
+        calendarBtnLabel.textContent = toMMDDYYYY(slotDate.value);
+
+        const xml = await fetchXml();
+        const target = toMMDDYYYY(slotDate.value);
+        const days = Array.from(xml.getElementsByTagName("CalendarDay"));
+        const match = days.find(
+          (d) =>
+            (d.getElementsByTagName("Date")[0]?.textContent || "").trim() ===
+            target
+        );
+
+        if (!match) {
+          scheduleWrap.innerHTML =
+            '<div class="empty">No school schedule found for this date.</div>';
+          dayLabel.textContent = "";
+          selectedCycleDay = ""; // clear if no match
+          return;
+        }
+
+        // Try several likely tag names; fall back to description if needed
+        selectedCycleDay = (
+          match.getElementsByTagName("CycleDay")[0]?.textContent || ""
+        ).trim();
+
+        buildScheduleTable(match);
       });
 
-    }
+      calendarBtn.addEventListener("click", () => {
+        // Prefer the modern API when available
+        if (typeof slotDate.showPicker === "function") {
+          slotDate.showPicker();
+        } else {
+          // Fallback for browsers without showPicker()
+          slotDate.focus();
+          slotDate.click();
+        }
+      });
 
+      // ===== Submit handler =====
+      document
+        .getElementById("requestForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const name = document.getElementById("name").value.trim();
+          const email = document.getElementById("email").value.trim();
+          const grade = document.getElementById("grade").value;
+          const subject = document.getElementById("subject").value;
+          const classSelection = document.getElementById("class").value;
+          const topic = document.getElementById("topic").value.trim();
+          let location = document.getElementById("location").value.trim();
+          if (!location) location = "Learning Center";
+          const info = document.getElementById("info").value.trim();
 
-    slotDate.addEventListener('change', async ()=>{
-      if(!slotDate.value){ return; }
-      calendarBtnLabel.textContent = toMMDDYYYY(slotDate.value);
+          const errors = [];
+          if (!email.endsWith("@hwemail.com"))
+            errors.push("Email must end with '@hwemail.com'.");
+          if (!grade) errors.push("Please select a grade.");
+          if (!subject) errors.push("Please select a subject.");
+          if (!classSelection) errors.push("Please select a class.");
+          if (!slots.length)
+            errors.push("Please add at least one available date & block.");
+          if (errors.length) {
+            alert(errors.join("\n"));
+            return;
+          }
 
-      const xml = await fetchXml();
-      const target = toMMDDYYYY(slotDate.value);
-      const days = Array.from(xml.getElementsByTagName('CalendarDay'));
-      const match = days.find(d => (d.getElementsByTagName('Date')[0]?.textContent||'').trim() === target);
-
-      if(!match){
-        scheduleWrap.innerHTML = '<div class="empty">No school schedule found for this date.</div>';
-        dayLabel.textContent='';
-        selectedCycleDay = ""; // clear if no match
-        return;
-      }
-
-      // Try several likely tag names; fall back to description if needed
-      selectedCycleDay = (match.getElementsByTagName('CycleDay')[0]?.textContent || '').trim();
-
-      buildScheduleTable(match);
-    });
-
-
-    calendarBtn.addEventListener('click', () => {
-      // Prefer the modern API when available
-      if (typeof slotDate.showPicker === 'function') {
-        slotDate.showPicker();
-      } else {
-        // Fallback for browsers without showPicker()
-        slotDate.focus();
-        slotDate.click();
-      }
-    });
-
-
-    // ===== Submit handler =====
-    document.getElementById('requestForm').addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const name = document.getElementById('name').value.trim();
-      const email = document.getElementById('email').value.trim();
-      const grade = document.getElementById('grade').value;
-      const subject = document.getElementById('subject').value;
-      const classSelection = document.getElementById('class').value;
-      const topic = document.getElementById('topic').value.trim();
-      let location = document.getElementById('location').value.trim();
-      if(!location) location = 'Learning Center';
-      const info = document.getElementById('info').value.trim();
-
-      const errors = [];
-      if(!email.endsWith('@hwemail.com')) errors.push("Email must end with '@hwemail.com'.");
-      if(!grade) errors.push('Please select a grade.');
-      if(!subject) errors.push('Please select a subject.');
-      if(!classSelection) errors.push('Please select a class.');
-      if(!slots.length) errors.push('Please add at least one available date & block.');
-      if(errors.length){ alert(errors.join('\n')); return; }
-
-      try {
-        await db.collection('Requests').add({
-          name, email, grade, subject,
-          class: classSelection,
-          topic, location, info,
-          availability: slots, // NEW: array of {date, block}
-          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          try {
+            await db.collection("Requests").add({
+              name,
+              email,
+              grade,
+              subject,
+              class: classSelection,
+              topic,
+              location,
+              info,
+              availability: slots, // NEW: array of {date, block}
+              timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+            alert("Request submitted successfully!");
+            // reset a few fields
+            slots.splice(0, slots.length);
+            renderChips();
+            syncHiddenField();
+            e.target.reset();
+          } catch (err) {
+            console.error(err);
+            alert(
+              "An error occurred while submitting your request. Please try again."
+            );
+          }
         });
-        alert('Request submitted successfully!');
-        // reset a few fields
-        slots.splice(0, slots.length); renderChips(); syncHiddenField();
-        e.target.reset();
-      } catch(err){
-        console.error(err); alert('An error occurred while submitting your request. Please try again.');
-      }
-    });
-  </script>
-</body>
+    </script>
+  </body>
 </html>

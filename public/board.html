@@ -1,657 +1,796 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Board</title>
-  <style>
-    :root {
-      --bg: #f7f7fb;
-      --card: #ffffff;
-      --ink: #111827;
-      --muted: #6b7280;
-      --brand: #1a57d6;
-      --brand-dark: #1547ad;
-      --ok: #10b981;
-      --danger: #ef4444;
-      --ring: rgba(26, 87, 214, 0.15);
-    }
-    * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:var(--ink); }
-    a.my-account-btn {
-      position: fixed; top: 18px; right: 18px; z-index: 20;
-      background: var(--brand); color:#fff; text-decoration:none; padding:10px 16px; border-radius:8px; font-weight:600;
-      box-shadow: 0 4px 14px rgba(26,87,214,.25);
-    }
-    a.my-account-btn:hover { background: var(--brand-dark); }
-
-    .shell { max-width: 1100px; margin: 80px auto 40px; padding: 0 16px; }
-    .header { margin-bottom: 16px; }
-    .header h1 { margin: 0 0 6px; font-size: 24px; }
-    .header p { margin: 0; color: var(--muted); }
-
-    #loading { margin: 16px 0; padding: 12px 16px; background: #fff; border:1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 6px 14px rgba(0,0,0,0.04); }
-    .hidden { display:none; }
-
-    /* Full-width banner per request */
-    .request-banner {
-      width: 100%;
-      display: flex;
-      align-items: stretch;
-      gap: 16px;
-      padding: 16px;
-      background: var(--card);
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.05);
-      margin: 12px 0;
-    }
-    .req-col {
-      display: grid;
-      gap: 6px;
-    }
-    .req-col h3 {
-      margin: 0; font-size: 18px;
-    }
-    .kv { display:flex; gap:8px; flex-wrap: wrap; }
-    .kv .k { color: var(--muted); min-width: 72px; }
-    .pill {
-      display: inline-flex; align-items: center; padding: 4px 8px; border:1px solid #e5e7eb; border-radius: 9999px; background:#fafafa; font-size: 12px;
-    }
-    .grow { flex: 1 1 auto; }
-    .right {
-      display: flex; align-items: center; gap: 12px; margin-left: auto;
-    }
-    select.avail {
-      min-width: 260px;
-      padding: 10px 12px;
-      border: 1px solid #d1d5db; border-radius: 10px; background: #fff;
-      outline: none;
-    }
-    select.avail:focus { box-shadow: 0 0 0 4px var(--ring); border-color: var(--brand); }
-
-    button.primary {
-      padding: 10px 14px; border: 0; border-radius: 10px; background: var(--brand); color:#fff; font-weight:600; cursor: pointer;
-      box-shadow: 0 6px 14px rgba(26,87,214,0.25);
-    }
-    button.primary:hover { background: var(--brand-dark); }
-    button.ghost {
-      padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 10px; cursor: pointer;
-    }
-
-    /* Mobile */
-    @media (max-width: 800px) {
-      .request-banner { flex-direction: column; }
-      .right { justify-content: flex-start; margin-left: 0; }
-      select.avail { width: 100%; min-width: 0; }
-    }
-  </style>
-</head>
-<body>
-  <a id="accountBtn" href="account.html" class="my-account-btn">MY ACCOUNT</a>
-
-  <div class="shell">
-    <!-- NEW: Upcoming Sessions -->
-    <div class="header" style="margin-bottom: 6px;">
-      <h1>My Upcoming Sessions</h1>
-      <p id="user-info" class="hidden"></p>
-    </div>
-  
-    <div id="sessions-loading" class="hidden">Loading sessions…</div>
-    <div id="sessions"></div>
-  
-    <!-- Existing: Open Requests -->
-    <div class="header" style="margin-top: 24px;">
-      <h1>Open Requests</h1>
-    </div>
-  
-
-
-
-
-    <div id="loading">Loading…</div>
-    <div id="requests"></div>
-
-    <!-- NEW: Completed Sessions -->
-    <div class="header" style="margin-top: 24px;">
-      <h1>My Completed Sessions</h1>
-    </div>
-    <div id="completed-loading" class="hidden">Loading sessions…</div>
-    <div id="completed"></div>
-    
-  </div>
-  
-
-  <!-- Firebase (modular) -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import {
-      getFirestore, collection, getDocs, addDoc, deleteDoc, doc, getDoc, setDoc,
-      query, where
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  
-    const firebaseConfig = {
-      apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
-      authDomain: "ptjobboard2024.firebaseapp.com",
-      databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-      projectId: "ptjobboard2024",
-      storageBucket: "ptjobboard2024.firebasestorage.app",
-      messagingSenderId: "401143229772",
-      appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-      measurementId: "G-PF9F78SKZV"
-    };
-  
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    await setPersistence(auth, browserLocalPersistence).catch(()=>{});
-  
-    const loadingEl = document.getElementById('loading');
-    const sessionsLoadingEl = document.getElementById('sessions-loading');
-    const userInfoEl = document.getElementById('user-info');
-    const listEl = document.getElementById('requests');
-    const sessionsEl = document.getElementById('sessions');
-    const completedLoadingEl = document.getElementById('completed-loading');
-    const completedEl = document.getElementById('completed');
-
-  
-    const blocksCatalog = {
-      '1' : 'Block 1',
-      'M11' : 'Junior Seminar',
-      '2' : 'Block 2',
-      'L' : 'Lunch',
-      '3' : 'Block 3',
-      'DS': 'DS',
-      'CC': 'CC (3:15-4:00)',
-      '4': 'Block 4',
-      'M10': 'Soph. Seminar',
-      '5': 'Block 5',
-      '6': 'Block 6',
-      '7': 'Block 7',
-      'FC': 'Faculty Collaboration',
-      'M12': 'Senior Seminar',
-      'CT': 'Community Time',
-      'OH': 'Office Hours',
-    };
-  
-    const fmtDate = (raw) => {
-      try {
-        const d = new Date(raw);
-        if (!isNaN(d)) return d.toLocaleString([], { dateStyle: 'medium' });
-      } catch {}
-      return String(raw);
-    };
-  
-  
-    const optionLabel = (slot) => {
-      const parts = [];
-      if (slot?.date) parts.push(fmtDate(slot.date));
-      if (slot?.cycleDay) parts.push(`Day ${slot.cycleDay}`);
-      if (slot?.block) {
-        const pretty = blocksCatalog[slot.block] || `Block ${slot.block}`;
-        parts.push(pretty);
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Board</title>
+    <script src="common-auth.js"></script>
+    <style>
+      :root {
+        --bg: #f7f7fb;
+        --card: #ffffff;
+        --ink: #111827;
+        --muted: #6b7280;
+        --brand: #1a57d6;
+        --brand-dark: #1547ad;
+        --ok: #10b981;
+        --danger: #ef4444;
+        --ring: rgba(26, 87, 214, 0.15);
       }
-      return parts.join(" • ") || "Unknown slot";
-    };
-  
-    // --- helpers ---
-    const slotKey = (slot) => {
-      const day = `${slot?.cycleDay ?? ""}`.trim();
-      const blk = `${slot?.block ?? ""}`.trim();
-      if (!day || !blk) return "";
-      return `${day}_${blk}`;
-    };
-  
-    const norm = (s) => (s ?? "")
-      .toString()
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
-  
-    // build a teachable Set from various shapes: array OR map of booleans
-    const buildTeachSet = (profile) => {
-      const candidates = [
-        profile?.classesToTeach,
-        profile?.subjectsToTeach,
-        profile?.classes,
-        profile?.subjects
-      ].filter(Boolean);
-  
-      const items = [];
-      for (const c of candidates) {
-        if (Array.isArray(c)) {
-          items.push(...c);
-        } else if (c && typeof c === 'object') {
-          items.push(...Object.entries(c).filter(([,v]) => !!v).map(([k]) => k));
-        } else if (typeof c === 'string') {
-          items.push(c);
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial,
+          sans-serif;
+        color: var(--ink);
+      }
+      a.my-account-btn {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 20;
+        background: var(--brand);
+        color: #fff;
+        text-decoration: none;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        box-shadow: 0 4px 14px rgba(26, 87, 214, 0.25);
+      }
+      a.my-account-btn:hover {
+        background: var(--brand-dark);
+      }
+
+      .shell {
+        max-width: 1100px;
+        margin: 80px auto 40px;
+        padding: 0 16px;
+      }
+      .header {
+        margin-bottom: 16px;
+      }
+      .header h1 {
+        margin: 0 0 6px;
+        font-size: 24px;
+      }
+      .header p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      #loading {
+        margin: 16px 0;
+        padding: 12px 16px;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.04);
+      }
+      .hidden {
+        display: none;
+      }
+
+      /* Full-width banner per request */
+      .request-banner {
+        width: 100%;
+        display: flex;
+        align-items: stretch;
+        gap: 16px;
+        padding: 16px;
+        background: var(--card);
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+        margin: 12px 0;
+      }
+      .req-col {
+        display: grid;
+        gap: 6px;
+      }
+      .req-col h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+      .kv {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .kv .k {
+        color: var(--muted);
+        min-width: 72px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border: 1px solid #e5e7eb;
+        border-radius: 9999px;
+        background: #fafafa;
+        font-size: 12px;
+      }
+      .grow {
+        flex: 1 1 auto;
+      }
+      .right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-left: auto;
+      }
+      select.avail {
+        min-width: 260px;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        background: #fff;
+        outline: none;
+      }
+      select.avail:focus {
+        box-shadow: 0 0 0 4px var(--ring);
+        border-color: var(--brand);
+      }
+
+      button.primary {
+        padding: 10px 14px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--brand);
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 6px 14px rgba(26, 87, 214, 0.25);
+      }
+      button.primary:hover {
+        background: var(--brand-dark);
+      }
+      button.ghost {
+        padding: 10px 12px;
+        border: 1px solid #e5e7eb;
+        background: #fff;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+
+      /* Mobile */
+      @media (max-width: 800px) {
+        .request-banner {
+          flex-direction: column;
+        }
+        .right {
+          justify-content: flex-start;
+          margin-left: 0;
+        }
+        select.avail {
+          width: 100%;
+          min-width: 0;
         }
       }
-      return new Set(items.map(norm).filter(Boolean));
-    };
-  
-    const isTeachable = (req, teachSet) => {
-      if (!teachSet || teachSet.size === 0) return true;
-      const reqClass = norm(req.class);
-      const reqSubject = norm(req.subject);
-      for (const t of teachSet) {
-        if (!t) continue;
-        if (reqClass == t || reqClass == "other") {
-          return true;
-        }
-      }
-      return false;
-    };
-  
-    const renderRequest = (docId, data, tutor, matchingSlots) => {
-      const wrap = document.createElement('div');
-      wrap.className = 'request-banner';
-  
-      const left = document.createElement('div');
-      left.className = 'req-col grow';
-      left.innerHTML = `
-        <h3>${data.name || 'No Name'} <span class="pill">${data.subject || '—'}</span> <span class="pill">${data.class || '—'}</span></h3>
-        <div class="kv"><span class="k">Email</span><span>${data.email || 'N/A'}</span></div>
-        <div class="kv"><span class="k">Grade</span><span>${data.grade || 'N/A'}</span></div>
-        <div class="kv"><span class="k">Topic</span><span>${data.topic || 'N/A'}</span></div>
-        <div class="kv"><span class="k">Location</span><span>${data.location || 'N/A'}</span></div>
-        <div class="kv"><span class="k">Info</span><span>${data.info || '—'}</span></div>
-      `;
-  
-      const right = document.createElement('div');
-      right.className = 'right';
-  
-      const select = document.createElement('select');
-      select.className = 'avail';
-      select.ariaLabel = 'Choose availability slot';
-  
-      const ph = document.createElement('option');
-      ph.value = '';
-      ph.disabled = true;
-      ph.selected = true;
-      ph.textContent = matchingSlots.length ? 'Select an availability…' : 'No matching availability';
-      select.appendChild(ph);
-  
-      matchingSlots.forEach((slot, idx) => {
-        const opt = document.createElement('option');
-        opt.value = String(idx);
-        opt.textContent = optionLabel(slot);
-        select.appendChild(opt);
-      });
-  
-      const finalizeBtn = document.createElement('button');
-      finalizeBtn.className = 'primary';
-      finalizeBtn.textContent = 'Finalize';
-      finalizeBtn.disabled = matchingSlots.length === 0;
-  
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'ghost';
-      cancelBtn.textContent = 'Dismiss';
-  
-      right.appendChild(select);
-      right.appendChild(finalizeBtn);
-      right.appendChild(cancelBtn);
-  
-      cancelBtn.addEventListener('click', () => {
-        select.selectedIndex = 0;
-      });
-  
-      finalizeBtn.addEventListener('click', async () => {
-        const chosen = select.value;
-        if (!chosen) {
-          select.focus();
-          select.reportValidity?.();
-          return;
-        }
-        const i = parseInt(chosen, 10);
-        const chosenSlot = matchingSlots[i] || {};
-  
-        finalizeBtn.disabled = true;
-  
+    </style>
+  </head>
+  <body>
+    <a id="accountBtn" href="account.html" class="my-account-btn">MY ACCOUNT</a>
+
+    <div class="shell">
+      <!-- NEW: Upcoming Sessions -->
+      <div class="header" style="margin-bottom: 6px">
+        <h1>My Upcoming Sessions</h1>
+        <p id="user-info" class="hidden"></p>
+      </div>
+
+      <div id="sessions-loading" class="hidden">Loading sessions…</div>
+      <div id="sessions"></div>
+
+      <!-- Existing: Open Requests -->
+      <div class="header" style="margin-top: 24px">
+        <h1>Open Requests</h1>
+      </div>
+
+      <div id="loading">Loading…</div>
+      <div id="requests"></div>
+
+      <!-- NEW: Completed Sessions -->
+      <div class="header" style="margin-top: 24px">
+        <h1>My Completed Sessions</h1>
+      </div>
+      <div id="completed-loading" class="hidden">Loading sessions…</div>
+      <div id="completed"></div>
+    </div>
+
+    <!-- Firebase (modular) -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        setPersistence,
+        browserLocalPersistence,
+      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+      import {
+        getFirestore,
+        collection,
+        getDocs,
+        addDoc,
+        deleteDoc,
+        doc,
+        getDoc,
+        setDoc,
+        query,
+        where,
+      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
+        authDomain: "ptjobboard2024.firebaseapp.com",
+        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
+        projectId: "ptjobboard2024",
+        storageBucket: "ptjobboard2024.firebasestorage.app",
+        messagingSenderId: "401143229772",
+        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
+        measurementId: "G-PF9F78SKZV",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+      await setPersistence(auth, browserLocalPersistence).catch(() => {});
+
+      const loadingEl = document.getElementById("loading");
+      const sessionsLoadingEl = document.getElementById("sessions-loading");
+      const userInfoEl = document.getElementById("user-info");
+      const listEl = document.getElementById("requests");
+      const sessionsEl = document.getElementById("sessions");
+      const completedLoadingEl = document.getElementById("completed-loading");
+      const completedEl = document.getElementById("completed");
+
+      const blocksCatalog = {
+        1: "Block 1",
+        M11: "Junior Seminar",
+        2: "Block 2",
+        L: "Lunch",
+        3: "Block 3",
+        DS: "DS",
+        CC: "CC (3:15-4:00)",
+        4: "Block 4",
+        M10: "Soph. Seminar",
+        5: "Block 5",
+        6: "Block 6",
+        7: "Block 7",
+        FC: "Faculty Collaboration",
+        M12: "Senior Seminar",
+        CT: "Community Time",
+        OH: "Office Hours",
+      };
+
+      const fmtDate = (raw) => {
         try {
-          await addDoc(collection(db, 'Sessions'), {
-            requestId: docId,
-            name: data.name || null,
-            email: data.email || null,
-            grade: data.grade || null,
-            subject: data.subject || null,
-            class: data.class || null,
-            topic: data.topic || null,
-            location: data.location || null,
-            info: data.info || null,
-            slot: {
-              date: chosenSlot.date || null,
-              cycleDay: chosenSlot.cycleDay || null,
-              block: chosenSlot.block || null
-            },
-            availability: data.availability,
-            tutorUid: tutor.uid,
-            tutorEmail: tutor.email || null,
-            tutorName: tutor.displayName || null,
-            createdAt: new Date().toISOString(),
-            status: 'scheduled'
-          });
-  
-          await deleteDoc(doc(db, 'Requests', docId));
-          await loadSessions(tutor);   
-          wrap.remove();
-        } catch (err) {
-          console.error('Finalize error:', err);
-          finalizeBtn.disabled = false;
+          const d = new Date(raw);
+          if (!isNaN(d)) return d.toLocaleString([], { dateStyle: "medium" });
+        } catch {}
+        return String(raw);
+      };
+
+      const optionLabel = (slot) => {
+        const parts = [];
+        if (slot?.date) parts.push(fmtDate(slot.date));
+        if (slot?.cycleDay) parts.push(`Day ${slot.cycleDay}`);
+        if (slot?.block) {
+          const pretty = blocksCatalog[slot.block] || `Block ${slot.block}`;
+          parts.push(pretty);
         }
-      });
-  
-      wrap.appendChild(left);
-      wrap.appendChild(right);
-      return wrap;
-    };
-  
-    // --- Sessions renderer (uses same banner layout for consistency) ---
-    const renderSession = (s, opts = {}) => {
-      const { showCancel = false, currentUser = null } = opts;
-      const wrap = document.createElement('div');
-      wrap.className = 'request-banner';
-  
-      const left = document.createElement('div');
-      left.className = 'req-col grow';
-      const slot = s.slot || {};
-      left.innerHTML = `
-        <h3>${s.name || 'Student'} <span class="pill">${s.subject || '—'}</span> <span class="pill">${s.class || '—'}</span></h3>
-        <div class="kv"><span class="k">Date</span><span>${optionLabel(slot)}</span></div>
-        <div class="kv"><span class="k">Location</span><span>${s.location || 'N/A'}</span></div>
-        <div class="kv"><span class="k">Status</span><span class="pill">${s.status || 'scheduled'}</span></div>
+        return parts.join(" • ") || "Unknown slot";
+      };
+
+      // --- helpers ---
+      const slotKey = (slot) => {
+        const day = `${slot?.cycleDay ?? ""}`.trim();
+        const blk = `${slot?.block ?? ""}`.trim();
+        if (!day || !blk) return "";
+        return `${day}_${blk}`;
+      };
+
+      const norm = (s) =>
+        (s ?? "").toString().toLowerCase().replace(/\s+/g, " ").trim();
+
+      // build a teachable Set from various shapes: array OR map of booleans
+      const buildTeachSet = (profile) => {
+        const candidates = [
+          profile?.classesToTeach,
+          profile?.subjectsToTeach,
+          profile?.classes,
+          profile?.subjects,
+        ].filter(Boolean);
+
+        const items = [];
+        for (const c of candidates) {
+          if (Array.isArray(c)) {
+            items.push(...c);
+          } else if (c && typeof c === "object") {
+            items.push(
+              ...Object.entries(c)
+                .filter(([, v]) => !!v)
+                .map(([k]) => k)
+            );
+          } else if (typeof c === "string") {
+            items.push(c);
+          }
+        }
+        return new Set(items.map(norm).filter(Boolean));
+      };
+
+      const isTeachable = (req, teachSet) => {
+        if (!teachSet || teachSet.size === 0) return true;
+        const reqClass = norm(req.class);
+        const reqSubject = norm(req.subject);
+        for (const t of teachSet) {
+          if (!t) continue;
+          if (reqClass == t || reqClass == "other") {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      const renderRequest = (docId, data, tutor, matchingSlots) => {
+        const wrap = document.createElement("div");
+        wrap.className = "request-banner";
+
+        const left = document.createElement("div");
+        left.className = "req-col grow";
+        left.innerHTML = `
+        <h3>${data.name || "No Name"} <span class="pill">${
+          data.subject || "—"
+        }</span> <span class="pill">${data.class || "—"}</span></h3>
+        <div class="kv"><span class="k">Email</span><span>${
+          data.email || "N/A"
+        }</span></div>
+        <div class="kv"><span class="k">Grade</span><span>${
+          data.grade || "N/A"
+        }</span></div>
+        <div class="kv"><span class="k">Topic</span><span>${
+          data.topic || "N/A"
+        }</span></div>
+        <div class="kv"><span class="k">Location</span><span>${
+          data.location || "N/A"
+        }</span></div>
+        <div class="kv"><span class="k">Info</span><span>${
+          data.info || "—"
+        }</span></div>
       `;
-  
-      wrap.appendChild(left);
-      if (showCancel) {
-   const right = document.createElement('div');
-   right.className = 'right';
-   const cancelBtn = document.createElement('button');
-   cancelBtn.className = 'ghost';
-   cancelBtn.textContent = 'Cancel & Reopen';
 
-   cancelBtn.addEventListener('click', async () => {
-     cancelBtn.disabled = true;
-     try {
-       // Prefer original availability; fall back to normalized; last resort: chosen slot only
-       const availability =
-         s.availability ??
-         (s.slot ? [s.slot] : []);
+        const right = document.createElement("div");
+        right.className = "right";
 
-       const reqData = {
-         name: s.name ?? null,
-         email: s.email ?? null,
-         grade: s.grade ?? null,
-         subject: s.subject ?? null,
-         class: s.class ?? null,
-         topic: s.topic ?? null,
-         location: s.location ?? null,
-         info: s.info ?? null,
-         availability
-       };
-       // If we know the original requestId, restore into the same doc ID.
-       if (s.requestId) {
-         await setDoc(doc(db, 'Requests', s.requestId), reqData);
-       } else {
-         await addDoc(collection(db, 'Requests'), reqData);
-       }
+        const select = document.createElement("select");
+        select.className = "avail";
+        select.ariaLabel = "Choose availability slot";
 
-       // Remove the session
-       await deleteDoc(doc(db, 'Sessions', s.id));
+        const ph = document.createElement("option");
+        ph.value = "";
+        ph.disabled = true;
+        ph.selected = true;
+        ph.textContent = matchingSlots.length
+          ? "Select an availability…"
+          : "No matching availability";
+        select.appendChild(ph);
 
-       // Quick, reliable UI refresh (rebuilds Upcoming, Open, Completed)
-       window.location.reload();
-     } catch (err) {
-       console.error('Cancel & Reopen error:', err);
-       cancelBtn.disabled = false;
-       alert('Failed to cancel the session. Please try again.');
-     }
-   });
+        matchingSlots.forEach((slot, idx) => {
+          const opt = document.createElement("option");
+          opt.value = String(idx);
+          opt.textContent = optionLabel(slot);
+          select.appendChild(opt);
+        });
 
-   right.appendChild(cancelBtn);
-   wrap.appendChild(right);
- }
-      return wrap;
-    };
+        const finalizeBtn = document.createElement("button");
+        finalizeBtn.className = "primary";
+        finalizeBtn.textContent = "Finalize";
+        finalizeBtn.disabled = matchingSlots.length === 0;
 
-    // --- NEW: reusable loader for "My Completed Sessions" (yesterday or earlier) ---
-    async function loadCompletedSessions(currentUser) {
-      completedLoadingEl.classList.remove('hidden');
-      completedEl.innerHTML = ''; // clear
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "ghost";
+        cancelBtn.textContent = "Dismiss";
 
-      // match by tutorName as requested (same as upcoming)
-      const myName = currentUser.displayName || '';
-      const qSessions = query(collection(db, 'Sessions'), where('tutorName', '==', myName));
-      const sessSnap = await getDocs(qSessions);
+        right.appendChild(select);
+        right.appendChild(finalizeBtn);
+        right.appendChild(cancelBtn);
 
-      const today = todayStart();
-      const completed = [];
+        cancelBtn.addEventListener("click", () => {
+          select.selectedIndex = 0;
+        });
 
-      sessSnap.forEach((d) => {
-        const s = d.data() || {};
-        const dateObj = toDate(s.slot?.date);
-        if (!dateObj) return;
-        // keep strictly before today (yesterday or earlier)
-        if (dateObj < today) {
-          completed.push({ id: d.id, ...s, _dateObj: dateObj });
+        finalizeBtn.addEventListener("click", async () => {
+          const chosen = select.value;
+          if (!chosen) {
+            select.focus();
+            select.reportValidity?.();
+            return;
+          }
+          const i = parseInt(chosen, 10);
+          const chosenSlot = matchingSlots[i] || {};
+
+          finalizeBtn.disabled = true;
+
+          try {
+            await addDoc(collection(db, "Sessions"), {
+              requestId: docId,
+              name: data.name || null,
+              email: data.email || null,
+              grade: data.grade || null,
+              subject: data.subject || null,
+              class: data.class || null,
+              topic: data.topic || null,
+              location: data.location || null,
+              info: data.info || null,
+              slot: {
+                date: chosenSlot.date || null,
+                cycleDay: chosenSlot.cycleDay || null,
+                block: chosenSlot.block || null,
+              },
+              availability: data.availability,
+              tutorUid: tutor.uid,
+              tutorEmail: tutor.email || null,
+              tutorName: tutor.displayName || null,
+              createdAt: new Date().toISOString(),
+              status: "scheduled",
+            });
+
+            await deleteDoc(doc(db, "Requests", docId));
+            await loadSessions(tutor);
+            wrap.remove();
+          } catch (err) {
+            console.error("Finalize error:", err);
+            finalizeBtn.disabled = false;
+          }
+        });
+
+        wrap.appendChild(left);
+        wrap.appendChild(right);
+        return wrap;
+      };
+
+      // --- Sessions renderer (uses same banner layout for consistency) ---
+      const renderSession = (s, opts = {}) => {
+        const { showCancel = false, currentUser = null } = opts;
+        const wrap = document.createElement("div");
+        wrap.className = "request-banner";
+
+        const left = document.createElement("div");
+        left.className = "req-col grow";
+        const slot = s.slot || {};
+        left.innerHTML = `
+        <h3>${s.name || "Student"} <span class="pill">${
+          s.subject || "—"
+        }</span> <span class="pill">${s.class || "—"}</span></h3>
+        <div class="kv"><span class="k">Date</span><span>${optionLabel(
+          slot
+        )}</span></div>
+        <div class="kv"><span class="k">Location</span><span>${
+          s.location || "N/A"
+        }</span></div>
+        <div class="kv"><span class="k">Status</span><span class="pill">${
+          s.status || "scheduled"
+        }</span></div>
+      `;
+
+        wrap.appendChild(left);
+        if (showCancel) {
+          const right = document.createElement("div");
+          right.className = "right";
+          const cancelBtn = document.createElement("button");
+          cancelBtn.className = "ghost";
+          cancelBtn.textContent = "Cancel & Reopen";
+
+          cancelBtn.addEventListener("click", async () => {
+            cancelBtn.disabled = true;
+            try {
+              // Prefer original availability; fall back to normalized; last resort: chosen slot only
+              const availability = s.availability ?? (s.slot ? [s.slot] : []);
+
+              const reqData = {
+                name: s.name ?? null,
+                email: s.email ?? null,
+                grade: s.grade ?? null,
+                subject: s.subject ?? null,
+                class: s.class ?? null,
+                topic: s.topic ?? null,
+                location: s.location ?? null,
+                info: s.info ?? null,
+                availability,
+              };
+              // If we know the original requestId, restore into the same doc ID.
+              if (s.requestId) {
+                await setDoc(doc(db, "Requests", s.requestId), reqData);
+              } else {
+                await addDoc(collection(db, "Requests"), reqData);
+              }
+
+              // Remove the session
+              await deleteDoc(doc(db, "Sessions", s.id));
+
+              // Quick, reliable UI refresh (rebuilds Upcoming, Open, Completed)
+              window.location.reload();
+            } catch (err) {
+              console.error("Cancel & Reopen error:", err);
+              cancelBtn.disabled = false;
+              alert("Failed to cancel the session. Please try again.");
+            }
+          });
+
+          right.appendChild(cancelBtn);
+          wrap.appendChild(right);
         }
-      });
+        return wrap;
+      };
 
-      // sort ascending by date (same behavior as upcoming)
-      completed.sort((a, b) => {
-        const d = a._dateObj - b._dateObj;
-        if (d !== 0) return d;
-        const ac = (a.slot?.cycleDay ?? '').toString().localeCompare((b.slot?.cycleDay ?? '').toString());
-        if (ac !== 0) return ac;
-        return (a.slot?.block ?? '').toString().localeCompare((b.slot?.block ?? '').toString());
-      });
+      // --- NEW: reusable loader for "My Completed Sessions" (yesterday or earlier) ---
+      async function loadCompletedSessions(currentUser) {
+        completedLoadingEl.classList.remove("hidden");
+        completedEl.innerHTML = ""; // clear
 
-      completedLoadingEl.classList.add('hidden');
-
-      if (completed.length === 0) {
-        const none = document.createElement('div');
-        none.id = 'completed-empty';
-        none.textContent = 'No completed sessions.';
-        completedEl.appendChild(none);
-      } else {
-        completed.forEach((s) => completedEl.appendChild(renderSession(s)));
-      }
-    }
-
-
-    // --- NEW: reusable loader for "My Upcoming Sessions" ---
-const toDate = (raw) => {
-  if (!raw) return null;
-  if (raw instanceof Date) return isNaN(raw) ? null : raw;
-  let d = new Date(raw);
-  if (!isNaN(d)) return d;
-  const m = String(raw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) {
-    const [, mm, dd, yyyy] = m.map(Number);
-    d = new Date(yyyy, mm - 1, dd);
-    if (!isNaN(d)) return d;
-  }
-  return null;
-};
-const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
-
-async function loadSessions(currentUser) {
-  sessionsLoadingEl.classList.remove('hidden');
-  sessionsEl.innerHTML = ''; // clear previous render
-
-  // match by tutorName as requested
-  const myName = currentUser.displayName || '';
-  const qSessions = query(collection(db, 'Sessions'), where('tutorName', '==', myName));
-  const sessSnap = await getDocs(qSessions);
-
-  const upcoming = [];
-  const today = todayStart();
-
-  sessSnap.forEach((d) => {
-    const s = d.data() || {};
-    const dateObj = toDate(s.slot?.date);
-    if (dateObj && dateObj >= today) {
-      upcoming.push({ id: d.id, ...s, _dateObj: dateObj });
-    }
-  });
-
-  // sort by date, then cycleDay, then block
-  upcoming.sort((a, b) => {
-    const d = a._dateObj - b._dateObj;
-    if (d !== 0) return d;
-    const ac = (a.slot?.cycleDay ?? '').toString().localeCompare((b.slot?.cycleDay ?? '').toString());
-    if (ac !== 0) return ac;
-    return (a.slot?.block ?? '').toString().localeCompare((b.slot?.block ?? '').toString());
-  });
-
-  sessionsLoadingEl.classList.add('hidden');
-
-  if (upcoming.length === 0) {
-    const none = document.createElement('div');
-    none.id = 'sessions-empty';
-    none.textContent = 'No upcoming sessions.';
-    sessionsEl.appendChild(none);
-  } else {
-    upcoming.forEach((s) => sessionsEl.appendChild(renderSession(s, { showCancel: true, currentUser })));
-  }
-}
-
-  
-    onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        window.location.href = 'signup.html';
-        return;
-      }
-      userInfoEl.textContent = `Signed in as ${user.displayName || user.email || 'Tutor'}`;
-      userInfoEl.classList.remove('hidden');
-  
-      try {
-        // --- load tutor profile ---
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-        const profile = userSnap.exists() ? (userSnap.data() || {}) : {};
-  
-        // availability map -> Set of "cycleDay_block"
-        const availMap = profile.availability || {};
-        const myAvailSet = new Set(
-          Object.entries(availMap)
-            .filter(([, v]) => !!v)
-            .map(([k]) => k.trim())
-        );
-  
-        // teachable set
-        const teachSet = buildTeachSet(profile);
-  
-        // ========== UPCOMING SESSIONS ==========
-        sessionsLoadingEl.classList.remove('hidden');
-  
-        // Query Sessions by tutorName == current user's displayName (as requested)
-        const myName = user.displayName || '';
+        // match by tutorName as requested (same as upcoming)
+        const myName = currentUser.displayName || "";
         const qSessions = query(
-          collection(db, 'Sessions'),
-          where('tutorName', '==', myName)
+          collection(db, "Sessions"),
+          where("tutorName", "==", myName)
         );
         const sessSnap = await getDocs(qSessions);
-  
+
         const today = todayStart();
-        const upcoming = [];
-  
+        const completed = [];
+
         sessSnap.forEach((d) => {
           const s = d.data() || {};
-          const slot = s.slot || {};
-          const dateObj = toDate(slot.date);
+          const dateObj = toDate(s.slot?.date);
           if (!dateObj) return;
-          // keep today or future
-          if (dateObj >= today) {
+          // keep strictly before today (yesterday or earlier)
+          if (dateObj < today) {
+            completed.push({ id: d.id, ...s, _dateObj: dateObj });
+          }
+        });
+
+        // sort ascending by date (same behavior as upcoming)
+        completed.sort((a, b) => {
+          const d = a._dateObj - b._dateObj;
+          if (d !== 0) return d;
+          const ac = (a.slot?.cycleDay ?? "")
+            .toString()
+            .localeCompare((b.slot?.cycleDay ?? "").toString());
+          if (ac !== 0) return ac;
+          return (a.slot?.block ?? "")
+            .toString()
+            .localeCompare((b.slot?.block ?? "").toString());
+        });
+
+        completedLoadingEl.classList.add("hidden");
+
+        if (completed.length === 0) {
+          const none = document.createElement("div");
+          none.id = "completed-empty";
+          none.textContent = "No completed sessions.";
+          completedEl.appendChild(none);
+        } else {
+          completed.forEach((s) => completedEl.appendChild(renderSession(s)));
+        }
+      }
+
+      // --- NEW: reusable loader for "My Upcoming Sessions" ---
+      const toDate = (raw) => {
+        if (!raw) return null;
+        if (raw instanceof Date) return isNaN(raw) ? null : raw;
+        let d = new Date(raw);
+        if (!isNaN(d)) return d;
+        const m = String(raw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) {
+          const [, mm, dd, yyyy] = m.map(Number);
+          d = new Date(yyyy, mm - 1, dd);
+          if (!isNaN(d)) return d;
+        }
+        return null;
+      };
+      const todayStart = () => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d;
+      };
+
+      async function loadSessions(currentUser) {
+        sessionsLoadingEl.classList.remove("hidden");
+        sessionsEl.innerHTML = ""; // clear previous render
+
+        // match by tutorName as requested
+        const myName = currentUser.displayName || "";
+        const qSessions = query(
+          collection(db, "Sessions"),
+          where("tutorName", "==", myName)
+        );
+        const sessSnap = await getDocs(qSessions);
+
+        const upcoming = [];
+        const today = todayStart();
+
+        sessSnap.forEach((d) => {
+          const s = d.data() || {};
+          const dateObj = toDate(s.slot?.date);
+          if (dateObj && dateObj >= today) {
             upcoming.push({ id: d.id, ...s, _dateObj: dateObj });
           }
         });
-  
-        // Sort ascending by date, then by cycleDay, then by block (string compare)
+
+        // sort by date, then cycleDay, then block
         upcoming.sort((a, b) => {
           const d = a._dateObj - b._dateObj;
           if (d !== 0) return d;
-          const ac = (a.slot?.cycleDay ?? '').toString().localeCompare((b.slot?.cycleDay ?? '').toString());
+          const ac = (a.slot?.cycleDay ?? "")
+            .toString()
+            .localeCompare((b.slot?.cycleDay ?? "").toString());
           if (ac !== 0) return ac;
-          return (a.slot?.block ?? '').toString().localeCompare((b.slot?.block ?? '').toString());
+          return (a.slot?.block ?? "")
+            .toString()
+            .localeCompare((b.slot?.block ?? "").toString());
         });
 
-        await loadCompletedSessions(user);
+        sessionsLoadingEl.classList.add("hidden");
 
-  
-        sessionsLoadingEl.classList.add('hidden');
-  
         if (upcoming.length === 0) {
-          const none = document.createElement('div');
-          none.id = 'sessions-empty';
-          none.textContent = 'No upcoming sessions.';
+          const none = document.createElement("div");
+          none.id = "sessions-empty";
+          none.textContent = "No upcoming sessions.";
           sessionsEl.appendChild(none);
         } else {
-          upcoming.forEach((s) => sessionsEl.appendChild(renderSession(s, { showCancel: true, currentUser: user })));
+          upcoming.forEach((s) =>
+            sessionsEl.appendChild(
+              renderSession(s, { showCancel: true, currentUser })
+            )
+          );
         }
-  
-        // ========== OPEN REQUESTS ==========
-        const snap = await getDocs(collection(db, 'Requests'));
-        loadingEl.classList.add('hidden');
-  
-        if (snap.empty) {
-          const none = document.createElement('div');
-          none.id = 'empty';
-          none.textContent = 'No open requests.';
-          listEl.appendChild(none);
+      }
+
+      onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+          window.location.href = "signup.html";
           return;
         }
-  
-        let renderedCount = 0;
-  
-        snap.forEach((d) => {
-          const data = d.data() || {};
-  
-          // normalize request slots
-          let slots = [];
-          if (Array.isArray(data.availability)) {
-            slots = data.availability;
-          } else if (data.availability && typeof data.availability === 'object') {
-            slots = Object.values(data.availability);
-          }
-  
-          // filter by availability match
-          const today = todayStart();
+        userInfoEl.textContent = `Signed in as ${
+          user.displayName || user.email || "Tutor"
+        }`;
+        userInfoEl.classList.remove("hidden");
 
-          const matchingSlots = slots.filter((s) => {
-            const key = slotKey(s);
-            const d = toDate(s?.date);
-            return key && myAvailSet.has(key) && d && d >= today; // availability AND not in the past
+        try {
+          // --- load tutor profile ---
+          const userRef = doc(db, "users", user.uid);
+          const userSnap = await getDoc(userRef);
+          const profile = userSnap.exists() ? userSnap.data() || {} : {};
+
+          // availability map -> Set of "cycleDay_block"
+          const availMap = profile.availability || {};
+          const myAvailSet = new Set(
+            Object.entries(availMap)
+              .filter(([, v]) => !!v)
+              .map(([k]) => k.trim())
+          );
+
+          // teachable set
+          const teachSet = buildTeachSet(profile);
+
+          // ========== UPCOMING SESSIONS ==========
+          sessionsLoadingEl.classList.remove("hidden");
+
+          // Query Sessions by tutorName == current user's displayName (as requested)
+          const myName = user.displayName || "";
+          const qSessions = query(
+            collection(db, "Sessions"),
+            where("tutorName", "==", myName)
+          );
+          const sessSnap = await getDocs(qSessions);
+
+          const today = todayStart();
+          const upcoming = [];
+
+          sessSnap.forEach((d) => {
+            const s = d.data() || {};
+            const slot = s.slot || {};
+            const dateObj = toDate(slot.date);
+            if (!dateObj) return;
+            // keep today or future
+            if (dateObj >= today) {
+              upcoming.push({ id: d.id, ...s, _dateObj: dateObj });
+            }
           });
-  
-          // filter by teachable class/subject
-          const teachOK = isTeachable(data, teachSet);
-  
-          // render only if BOTH conditions pass
-          if (matchingSlots.length > 0 && teachOK) {
-            const banner = renderRequest(d.id, data, user, matchingSlots);
-            listEl.appendChild(banner);
-            renderedCount++;
+
+          // Sort ascending by date, then by cycleDay, then by block (string compare)
+          upcoming.sort((a, b) => {
+            const d = a._dateObj - b._dateObj;
+            if (d !== 0) return d;
+            const ac = (a.slot?.cycleDay ?? "")
+              .toString()
+              .localeCompare((b.slot?.cycleDay ?? "").toString());
+            if (ac !== 0) return ac;
+            return (a.slot?.block ?? "")
+              .toString()
+              .localeCompare((b.slot?.block ?? "").toString());
+          });
+
+          await loadCompletedSessions(user);
+
+          sessionsLoadingEl.classList.add("hidden");
+
+          if (upcoming.length === 0) {
+            const none = document.createElement("div");
+            none.id = "sessions-empty";
+            none.textContent = "No upcoming sessions.";
+            sessionsEl.appendChild(none);
+          } else {
+            upcoming.forEach((s) =>
+              sessionsEl.appendChild(
+                renderSession(s, { showCancel: true, currentUser: user })
+              )
+            );
           }
-        });
-  
-        if (renderedCount === 0) {
-          const none = document.createElement('div');
-          none.id = 'empty';
-          none.textContent = 'No open requests that match your availability and classes to teach.';
-          listEl.appendChild(none);
+
+          // ========== OPEN REQUESTS ==========
+          const snap = await getDocs(collection(db, "Requests"));
+          loadingEl.classList.add("hidden");
+
+          if (snap.empty) {
+            const none = document.createElement("div");
+            none.id = "empty";
+            none.textContent = "No open requests.";
+            listEl.appendChild(none);
+            return;
+          }
+
+          let renderedCount = 0;
+
+          snap.forEach((d) => {
+            const data = d.data() || {};
+
+            // normalize request slots
+            let slots = [];
+            if (Array.isArray(data.availability)) {
+              slots = data.availability;
+            } else if (
+              data.availability &&
+              typeof data.availability === "object"
+            ) {
+              slots = Object.values(data.availability);
+            }
+
+            // filter by availability match
+            const today = todayStart();
+
+            const matchingSlots = slots.filter((s) => {
+              const key = slotKey(s);
+              const d = toDate(s?.date);
+              return key && myAvailSet.has(key) && d && d >= today; // availability AND not in the past
+            });
+
+            // filter by teachable class/subject
+            const teachOK = isTeachable(data, teachSet);
+
+            // render only if BOTH conditions pass
+            if (matchingSlots.length > 0 && teachOK) {
+              const banner = renderRequest(d.id, data, user, matchingSlots);
+              listEl.appendChild(banner);
+              renderedCount++;
+            }
+          });
+
+          if (renderedCount === 0) {
+            const none = document.createElement("div");
+            none.id = "empty";
+            none.textContent =
+              "No open requests that match your availability and classes to teach.";
+            listEl.appendChild(none);
+          }
+        } catch (e) {
+          sessionsLoadingEl.classList.add("hidden");
+          loadingEl.textContent = "Failed to load requests.";
+          console.error(e);
         }
-  
-      } catch (e) {
-        sessionsLoadingEl.classList.add('hidden');
-        loadingEl.textContent = 'Failed to load requests.';
-        console.error(e);
-      }
-    });
-  </script>
-  
-  
-  
-</body>
+      });
+    </script>
+  </body>
 </html>
