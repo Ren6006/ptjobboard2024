@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Board</title>
     <script src="common-auth.js"></script>
+    <script src="firebase-config.js"></script>
     <style>
       :root {
         --bg: #f7f7fb;
@@ -28,20 +29,50 @@
         color: var(--ink);
       }
       a.my-account-btn {
-        position: fixed;
-        top: 18px;
-        right: 18px;
-        z-index: 20;
         background: var(--brand);
         color: #fff;
         text-decoration: none;
         padding: 10px 16px;
         border-radius: 8px;
         font-weight: 600;
-        box-shadow: 0 4px 14px rgba(26, 87, 214, 0.25);
       }
       a.my-account-btn:hover {
         background: var(--brand-dark);
+      }
+      
+
+      button.signout-btn {
+        background: var(--danger);
+        color: #fff;
+        padding: 10px 16px;
+        border: 0;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.signout-btn:hover { opacity: 0.9; }
+
+      .top-actions {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .top-actions .top-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 16px;
+        min-height: 40px;
+        line-height: 20px;
+        font-size: 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        border: 0;
+        text-decoration: none;
       }
 
       .shell {
@@ -172,7 +203,12 @@
     </style>
   </head>
   <body>
-    <a id="accountBtn" href="account.html" class="my-account-btn">MY ACCOUNT</a>
+    <div class="top-actions">
+      <a id="accountBtn" href="account.html" class="my-account-btn top-btn">MY ACCOUNT</a>
+      <button id="signOutBtn" class="signout-btn top-btn">SIGN OUT</button>
+    </div>
+
+    <div id="topBanner" class="hidden" style="max-width:1100px;margin:80px auto 12px;padding:10px 12px;border-radius:8px;border:1px solid #fecaca;background:#fee2e2;color:#b91c1c;font-weight:600"></div>
 
     <div class="shell">
       <!-- NEW: Upcoming Sessions -->
@@ -198,6 +234,32 @@
       </div>
       <div id="completed-loading" class="hidden">Loading sessions…</div>
       <div id="completed"></div>
+
+      <!-- Subject Lead / Head Console (conditional) -->
+      <div id="lead-console" class="hidden">
+        <div class="header" style="margin-top: 24px">
+          <h1>Lead Console</h1>
+          <p class="muted">Visible to subject leads and heads.</p>
+        </div>
+
+        <div class="header" style="margin-top: 8px">
+          <h1>Pending Class Approvals</h1>
+        </div>
+        <div id="lead-approvals-loading" class="hidden">Loading approvals…</div>
+        <div id="lead-approvals"></div>
+
+        <div class="header" style="margin-top: 24px">
+          <h1>Open Tutoring Requests in My Subjects</h1>
+        </div>
+        <div id="lead-open-loading" class="hidden">Loading requests…</div>
+        <div id="lead-open"></div>
+
+        <div class="header" style="margin-top: 24px">
+          <h1>Completed Sessions in My Subjects</h1>
+        </div>
+        <div id="lead-completed-loading" class="hidden">Loading sessions…</div>
+        <div id="lead-completed"></div>
+      </div>
     </div>
 
     <!-- Firebase (modular) -->
@@ -208,6 +270,7 @@
         onAuthStateChanged,
         setPersistence,
         browserLocalPersistence,
+        signOut,
       } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
       import {
         getFirestore,
@@ -222,18 +285,7 @@
         where,
       } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-      const firebaseConfig = {
-        apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
-        authDomain: "ptjobboard2024.firebaseapp.com",
-        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-        projectId: "ptjobboard2024",
-        storageBucket: "ptjobboard2024.firebasestorage.app",
-        messagingSenderId: "401143229772",
-        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-        measurementId: "G-PF9F78SKZV",
-      };
-
-      const app = initializeApp(firebaseConfig);
+      const app = initializeApp(window.__FIREBASE_CONFIG__);
       const auth = getAuth(app);
       const db = getFirestore(app);
       await setPersistence(auth, browserLocalPersistence).catch(() => {});
@@ -245,6 +297,15 @@
       const sessionsEl = document.getElementById("sessions");
       const completedLoadingEl = document.getElementById("completed-loading");
       const completedEl = document.getElementById("completed");
+      const signOutBtn = document.getElementById("signOutBtn");
+      const topBanner = document.getElementById("topBanner");
+      const leadConsole = document.getElementById("lead-console");
+      const leadApprovalsEl = document.getElementById("lead-approvals");
+      const leadApprovalsLoadingEl = document.getElementById("lead-approvals-loading");
+      const leadOpenEl = document.getElementById("lead-open");
+      const leadOpenLoadingEl = document.getElementById("lead-open-loading");
+      const leadCompletedEl = document.getElementById("lead-completed");
+      const leadCompletedLoadingEl = document.getElementById("lead-completed-loading");
 
       const blocksCatalog = {
         1: "Block 1",
@@ -653,6 +714,16 @@
           window.location.href = "signup.html";
           return;
         }
+        
+        // Check for error banner
+        try {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('err') === 'admin_denied') {
+            topBanner.textContent = "You don't have permission to view the admin page.";
+            topBanner.classList.remove('hidden');
+          }
+        } catch (_) {}
+
         userInfoEl.textContent = `Signed in as ${
           user.displayName || user.email || "Tutor"
         }`;
@@ -663,6 +734,11 @@
           const userRef = doc(db, "users", user.uid);
           const userSnap = await getDoc(userRef);
           const profile = userSnap.exists() ? userSnap.data() || {} : {};
+
+          const role = profile.role || null;
+          const isHead = role === 'Head';
+          const isLead = role && role.endsWith(' Lead');
+          if (isLead || isHead) leadConsole.classList.remove('hidden');
 
           // availability map -> Set of "cycleDay_block"
           const availMap = profile.availability || {};
@@ -785,12 +861,139 @@
               "No open requests that match your availability and classes to teach.";
             listEl.appendChild(none);
           }
+
+          // ========== LEAD / HEAD PANELS ==========
+          if (isLead || isHead) {
+            // Extract subject from "Math Lead" → "Math"
+            const leadSubject = isLead ? role.replace(/\s+Lead$/, '').trim() : null;
+            const subjects = isHead ? null : new Set(leadSubject ? [leadSubject] : []);
+
+            // Pending Class Approvals
+            leadApprovalsLoadingEl.classList.remove('hidden');
+            leadApprovalsEl.innerHTML = '';
+            const approvalsSnap = await getDocs(collection(db, 'ClassRequests'));
+            const pending = [];
+            approvalsSnap.forEach((d) => {
+              const r = d.data() || {};
+              if (r.status === 'pending' && (isHead || subjects.has(r.subject))) {
+                pending.push({ id: d.id, ...r });
+              }
+            });
+            leadApprovalsLoadingEl.classList.add('hidden');
+            if (pending.length === 0) {
+              const none = document.createElement('div');
+              none.textContent = 'No pending class requests.';
+              leadApprovalsEl.appendChild(none);
+            } else {
+              pending.forEach((r) => {
+                const row = document.createElement('div');
+                row.className = 'request-banner';
+                row.innerHTML = `
+                  <div class="req-col grow">
+                    <h3>${r.userName || r.userEmail || 'Tutor'} <span class="pill">${r.subject}</span> <span class="pill">${r.class}</span></h3>
+                    <div class="kv"><span class="k">Email</span><span>${r.userEmail || ''}</span></div>
+                    <div class="kv"><span class="k">Requested</span><span>${r.requestedAt || ''}</span></div>
+                  </div>
+                `;
+                const actions = document.createElement('div');
+                actions.className = 'right';
+                const approve = document.createElement('button');
+                approve.className = 'primary';
+                approve.textContent = 'Approve';
+                const reject = document.createElement('button');
+                reject.className = 'ghost';
+                reject.textContent = 'Reject';
+                actions.appendChild(approve);
+                actions.appendChild(reject);
+                row.appendChild(actions);
+
+                approve.addEventListener('click', async () => {
+                  approve.disabled = true; reject.disabled = true;
+                  const ref = doc(db, 'ClassRequests', r.id);
+                  await setDoc(ref, { status: 'approved', decidedAt: new Date().toISOString() }, { merge: true });
+                  row.remove();
+                });
+                reject.addEventListener('click', async () => {
+                  approve.disabled = true; reject.disabled = true;
+                  const ref = doc(db, 'ClassRequests', r.id);
+                  await setDoc(ref, { status: 'rejected', decidedAt: new Date().toISOString() }, { merge: true });
+                  row.remove();
+                });
+
+                leadApprovalsEl.appendChild(row);
+              });
+            }
+
+            // Open Tutoring Requests in My Subjects
+            leadOpenLoadingEl.classList.remove('hidden');
+            leadOpenEl.innerHTML = '';
+            const reqSnap = await getDocs(collection(db, 'Requests'));
+            const openReqs = [];
+            reqSnap.forEach((d) => {
+              const r = d.data() || {};
+              if ((isHead || subjects.has(r.subject)) && r.subject) {
+                openReqs.push({ id: d.id, ...r });
+              }
+            });
+            leadOpenLoadingEl.classList.add('hidden');
+            if (openReqs.length === 0) {
+              const none = document.createElement('div');
+              none.textContent = 'No open requests in your subjects.';
+              leadOpenEl.appendChild(none);
+            } else {
+              openReqs.forEach((r) => {
+                const row = document.createElement('div');
+                row.className = 'request-banner';
+                row.innerHTML = `
+                  <div class="req-col grow">
+                    <h3>${r.name || 'Student'} <span class="pill">${r.subject || '—'}</span> <span class="pill">${r.class || '—'}</span></h3>
+                    <div class="kv"><span class="k">Email</span><span>${r.email || ''}</span></div>
+                    <div class="kv"><span class="k">Topic</span><span>${r.topic || '—'}</span></div>
+                  </div>
+                `;
+                leadOpenEl.appendChild(row);
+              });
+            }
+
+            // Completed sessions in my subjects (yesterday or earlier)
+            leadCompletedLoadingEl.classList.remove('hidden');
+            leadCompletedEl.innerHTML = '';
+            const sessAllSnap = await getDocs(collection(db, 'Sessions'));
+            const completed = [];
+            const today = todayStart();
+            sessAllSnap.forEach((d) => {
+              const s = d.data() || {};
+              const dateObj = toDate(s.slot?.date);
+              if (!dateObj || dateObj >= today) return;
+              if (isHead || subjects.has(s.subject)) completed.push({ id: d.id, ...s, _dateObj: dateObj });
+            });
+            completed.sort((a,b)=>a._dateObj-b._dateObj);
+            leadCompletedLoadingEl.classList.add('hidden');
+            if (completed.length === 0) {
+              const none = document.createElement('div');
+              none.textContent = 'No completed sessions in your subjects.';
+              leadCompletedEl.appendChild(none);
+            } else {
+              completed.forEach((s) => leadCompletedEl.appendChild(renderSession(s)));
+            }
+          }
         } catch (e) {
           sessionsLoadingEl.classList.add("hidden");
           loadingEl.textContent = "Failed to load requests.";
           console.error(e);
         }
       });
+
+      // Sign out handler (available after app/auth init)
+      if (signOutBtn) {
+        signOutBtn.addEventListener("click", async () => {
+          try {
+            await signOut(auth);
+          } finally {
+            window.location.href = "index.html";
+          }
+        });
+      }
     </script>
   </body>
 </html>

@@ -1,13 +1,15 @@
 // index.js (Firebase Functions Gen2, ESM)
 
 // ---- Imports (ESM at top) ----
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";   // Admin init for ref.get()
 import { google } from "googleapis";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 // ---- Init Admin (once) ----
 initializeApp();
+const db = getFirestore();
 
 // ---- Secrets (recommended over raw env) ----
 const GMAIL_CLIENT_ID = defineSecret("GMAIL_CLIENT_ID");
@@ -125,6 +127,133 @@ HW Peer Tutoring`;
       } catch (err) {
         console.error("Error sending email to", to, err?.response?.data || err);
       }
+    }
+  }
+);
+
+// ---- Helpers for Class Requests ----
+function buildApprovalEmail({ userName, subjectName, className }) {
+  const name = userName || "student";
+  return `Hello ${name},
+
+Your class request has been approved.
+
+✅ Class: ${className || ""}
+📚 Subject: ${subjectName || ""}
+
+You can now be matched for this class on the board.
+
+Thank you,
+HW Peer Tutoring`;
+}
+
+async function grantApprovedClass({ uid, className }) {
+  if (!uid || !className) return;
+  await db.collection("users").doc(uid).set(
+    { classes: FieldValue.arrayUnion(className) },
+    { merge: true }
+  );
+}
+
+// Auto-approve if requester is a lead of the subject (or Head)
+export const onClassRequestCreated = onDocumentCreated(
+  {
+    document: "ClassRequests/{requestId}",
+    region: "us-central1",
+    timeoutSeconds: 540,
+    secrets: [GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN],
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const request = snap.data() || {};
+    const { uid, subject: subjectName, class: className } = request;
+    if (!uid || !subjectName || !className) return;
+
+    try {
+      const userRef = db.collection("users").doc(uid);
+      const userDoc = await userRef.get();
+      const role = (userDoc.exists && userDoc.data()?.role) || null;
+      const isHead = role === "Head";
+      const isLeadOfSubject = role === `${subjectName} Lead`;
+
+      if (isHead || isLeadOfSubject) {
+        // Auto-approve
+        const decidedAt = new Date().toISOString();
+        await snap.ref.set(
+          {
+            status: "approved",
+            decidedAt,
+            decidedByUid: uid,
+            decidedByName: userDoc.data()?.name || userDoc.data()?.displayName || null,
+            decidedByRole: isHead ? "Head" : "SubjectLead",
+          },
+          { merge: true }
+        );
+
+        // Grant class and email
+        await grantApprovedClass({ uid, className });
+
+        try {
+          const gmail = await getGmailClient();
+          const toList = [request.userEmail, "uspeertutoring@hw.com"].filter(Boolean);
+          const subject = `Class Request Approved: ${className}`;
+          const text = buildApprovalEmail({ userName: request.userName, subjectName, className });
+          const from = `"HW Peer Tutoring" <uspeertutoring@hw.com>`;
+          for (const to of toList) {
+            const raw = makeEmail({ from, to, subject, text });
+            await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+          }
+        } catch (err) {
+          console.error("Email send failed for auto-approval", err?.response?.data || err);
+        }
+      }
+    } catch (err) {
+      console.error("onClassRequestCreated error", err);
+    }
+  }
+);
+
+// When status flips to approved, grant class and email user
+export const onClassRequestApproved = onDocumentUpdated(
+  {
+    document: "ClassRequests/{requestId}",
+    region: "us-central1",
+    timeoutSeconds: 540,
+    secrets: [GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN],
+  },
+  async (event) => {
+    const before = event.data?.before;
+    const after = event.data?.after;
+    if (!before || !after) return;
+    const prev = before.data() || {};
+    const curr = after.data() || {};
+
+    if (prev.status === "approved" || curr.status !== "approved") return;
+
+    const uid = curr.uid;
+    const className = curr.class;
+    const subjectName = curr.subject;
+    if (!uid || !className) return;
+
+    try {
+      await grantApprovedClass({ uid, className });
+
+      try {
+        const gmail = await getGmailClient();
+        const toList = [curr.userEmail, "uspeertutoring@hw.com"].filter(Boolean);
+        const subject = `Class Request Approved: ${className}`;
+        const text = buildApprovalEmail({ userName: curr.userName, subjectName, className });
+        const from = `"HW Peer Tutoring" <uspeertutoring@hw.com>`;
+        for (const to of toList) {
+          const raw = makeEmail({ from, to, subject, text });
+          await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+        }
+      } catch (err) {
+        console.error("Email send failed on approval", err?.response?.data || err);
+      }
+    } catch (err) {
+      console.error("Failed to grant approved class", err);
     }
   }
 );

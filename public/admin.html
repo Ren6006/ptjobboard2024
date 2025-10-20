@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Console</title>
+    <script src="common-auth.js"></script>
+    <script src="firebase-config.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f7f7fb; color:#111827; }
+      .shell { max-width: 1400px; margin: 64px auto 40px; padding: 0 16px; }
+      h1 { margin:0 0 4px; font-size:28px; }
+      h2 { margin:16px 0 8px; font-size:18px; }
+      .tabs { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+      .tab { padding:10px 14px; border:1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; font-weight:500; transition:all 0.15s; }
+      .tab:hover { background:#f9fafb; }
+      .tab.active { background:#1a57d6; color:#fff; border-color:#1a57d6; }
+      .panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px; box-shadow:0 6px 16px rgba(0,0,0,0.05); min-height:200px; }
+      .filters { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+      .filters input, .filters select { padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; }
+      .filters button { padding:8px 12px; background:#1a57d6; color:#fff; border:0; border-radius:6px; cursor:pointer; font-weight:500; }
+      .filters button:hover { background:#1547ad; }
+      .filters button.secondary { background:#6b7280; }
+      .filters button.secondary:hover { background:#4b5563; }
+      .item { display:flex; gap:12px; padding:12px; border:1px solid #e5e7eb; border-radius:8px; margin:8px 0; align-items:center; }
+      .item:hover { background:#fafbfc; }
+      .grow { flex:1 1 auto; }
+      .right { display:flex; gap:8px; align-items:center; margin-left:auto; }
+      .pill { display:inline-flex; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px; background:#fafafa; font-size:12px; }
+      .pill.pending { background:#fef3c7; border-color:#fcd34d; color:#92400e; }
+      .pill.approved { background:#d1fae5; border-color:#6ee7b7; color:#065f46; }
+      .pill.rejected { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
+      .pill.scheduled { background:#dbeafe; border-color:#93c5fd; color:#1e40af; }
+      .btn { padding:8px 12px; border:1px solid #e5e7eb; background:#fff; border-radius:6px; cursor:pointer; font-weight:500; }
+      .btn.primary { background:#1a57d6; color:#fff; border-color:#1a57d6; }
+      .btn.primary:hover { background:#1547ad; }
+      .btn.danger { background:#ef4444; color:#fff; border-color:#ef4444; }
+      .btn.danger:hover { background:#dc2626; }
+      .btn:disabled { opacity:0.5; cursor:not-allowed; }
+      a.back { position:fixed; top:18px; right:18px; background:#1a57d6; color:#fff; text-decoration:none; padding:10px 16px; border-radius:8px; font-weight:600; box-shadow:0 4px 14px rgba(26, 87, 214, 0.25); }
+      .empty { text-align:center; padding:24px; color:#9ca3af; }
+      table { width:100%; border-collapse:collapse; margin-top:8px; }
+      th { text-align:left; padding:10px 12px; border-bottom:2px solid #e5e7eb; font-weight:600; background:#f9fafb; }
+      td { padding:10px 12px; border-bottom:1px solid #f3f4f6; }
+      tr:hover { background:#fafbfc; }
+      .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-top:12px; }
+      .stat-card { padding:16px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+      .stat-card .label { font-size:13px; color:#6b7280; margin-bottom:4px; }
+      .stat-card .value { font-size:28px; font-weight:700; color:#1a57d6; }
+      .user-row { cursor:pointer; }
+      .user-row:hover { background:#f9fafb; }
+      .user-detail { display:none; background:#fafbfc; border-top:1px solid #e5e7eb; }
+      .user-detail.open { display:table-row; }
+      .user-detail td { padding:16px; }
+      .field-row { display:grid; grid-template-columns:120px 1fr; gap:8px; margin-bottom:8px; align-items:start; }
+      .field-row label { font-weight:600; padding-top:8px; }
+      .field-row input, .field-row select, .field-row textarea { padding:8px; border:1px solid #d1d5db; border-radius:6px; width:100%; }
+    </style>
+  </head>
+  <body>
+    <a href="board.html" class="back">Back to Board</a>
+    <div id="loadingBanner" style="max-width:1400px;margin:24px auto 0;padding:10px 12px;border-radius:8px;border:1px solid #dbeafe;background:#eff6ff;color:#1e40af">Checking admin access…</div>
+    <div class="shell" style="display:none">
+      <h1>Admin Console</h1>
+      <p id="who" style="color:#6b7280;margin:4px 0 16px"></p>
+      <div class="tabs">
+        <button class="tab active" data-tab="approvals">Class Approvals</button>
+        <button class="tab" data-tab="requests">Tutoring Requests</button>
+        <button class="tab" data-tab="sessions">Sessions</button>
+        <button class="tab" data-tab="users">Users & Roles</button>
+        <button class="tab" data-tab="analytics">Analytics</button>
+      </div>
+      <div id="approvals" class="panel"></div>
+      <div id="requests" class="panel" style="display:none"></div>
+      <div id="sessions" class="panel" style="display:none"></div>
+      <div id="users" class="panel" style="display:none"></div>
+      <div id="analytics" class="panel" style="display:none"></div>
+    </div>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+      import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+      import { getFirestore, collection, getDocs, setDoc, doc, getDoc, query, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+       const app = initializeApp(window.__FIREBASE_CONFIG__);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+      await setPersistence(auth, browserLocalPersistence).catch(()=>{});
+
+      const who = document.getElementById('who');
+      const tabs = document.querySelectorAll('.tab');
+       const panels = { approvals: document.getElementById('approvals'), requests: document.getElementById('requests'), sessions: document.getElementById('sessions'), users: document.getElementById('users'), analytics: document.getElementById('analytics') };
+       const shell = document.querySelector('.shell');
+       const loadingBanner = document.getElementById('loadingBanner');
+      
+      tabs.forEach(t => t.addEventListener('click', () => {
+        tabs.forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        Object.keys(panels).forEach(k => panels[k].style.display = (k === t.dataset.tab ? 'block':'none'));
+      }));
+
+      function hasAdminRole(role) {
+        return role === 'Admin' || role === 'Head' || role === 'Developer';
+      }
+
+      const fmtDate = (raw) => {
+        try {
+          const d = new Date(raw);
+          if (!isNaN(d)) return d.toLocaleDateString();
+        } catch {}
+        return String(raw);
+      };
+
+      let navigated = false;
+      onAuthStateChanged(auth, async (user) => {
+       if (navigated) return;
+       if (!user) { navigated = true; window.location.replace('signin.html?next=admin.html'); return; }
+       try {
+         const ref = doc(db, 'users', user.uid);
+         const snap = await getDoc(ref);
+         const profile = snap.exists() ? (snap.data() || {}) : {};
+         const role = profile.role || null;
+         if (!hasAdminRole(role)) {
+           navigated = true;
+           const url = new URL('board.html', window.location.href);
+           url.searchParams.set('err', 'admin_denied');
+           window.location.replace(url.toString());
+           return;
+         }
+         who.textContent = `${user.email || ''} • ${role}`;
+         if (loadingBanner) loadingBanner.style.display = 'none';
+         shell.style.display = 'block';
+
+         // ========== TAB 1: CLASS APPROVALS ==========
+         async function loadApprovals() {
+           const approvals = panels.approvals;
+           approvals.innerHTML = '<h2>Class Approval Requests</h2><div class="filters"><input id="filterSubject" placeholder="Filter by subject..." /><select id="filterStatus"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><button id="refreshApprovals">Refresh</button></div><div id="approvalsList"></div>';
+           const filterSubject = document.getElementById('filterSubject');
+           const filterStatus = document.getElementById('filterStatus');
+           const approvalsList = document.getElementById('approvalsList');
+           document.getElementById('refreshApprovals').addEventListener('click', renderApprovals);
+
+           async function renderApprovals() {
+             approvalsList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'ClassRequests'));
+             const items = [];
+             snap.forEach(d => { const r = d.data() || {}; items.push({ id: d.id, ...r }); });
+             
+             let filtered = items;
+             const subFilter = filterSubject.value.toLowerCase().trim();
+             const statFilter = filterStatus.value;
+             if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter));
+             if (statFilter) filtered = filtered.filter(r => r.status === statFilter);
+             
+             filtered.sort((a,b)=> String(a.status).localeCompare(String(b.status)) || String(a.subject).localeCompare(String(b.subject)));
+             approvalsList.innerHTML = '';
+             if (filtered.length === 0) {
+               approvalsList.innerHTML = '<div class="empty">No class requests found.</div>';
+               return;
+             }
+             filtered.forEach((r) => {
+               const row = document.createElement('div');
+               row.className = 'item';
+               const statusClass = r.status === 'pending' ? 'pending' : r.status === 'approved' ? 'approved' : 'rejected';
+               row.innerHTML = `
+                 <div class="grow">
+                   <div><strong>${r.userName || r.userEmail || 'Tutor'}</strong> • ${r.userEmail || ''}</div>
+                   <div style="margin-top:4px">${r.subject} — ${r.class} <span class="pill ${statusClass}">${r.status}</span></div>
+                   <div style="font-size:12px;color:#6b7280;margin-top:4px">Requested: ${fmtDate(r.requestedAt)}</div>
+                 </div>
+               `;
+               if (r.status === 'pending') {
+                 const actions = document.createElement('div');
+                 actions.className = 'right';
+                 const approve = document.createElement('button'); approve.textContent = 'Approve'; approve.className = 'btn primary';
+                 const reject = document.createElement('button'); reject.textContent = 'Reject'; reject.className = 'btn';
+                 approve.addEventListener('click', async () => { approve.disabled = true; reject.disabled = true; await setDoc(doc(db, 'ClassRequests', r.id), { status: 'approved', decidedAt: new Date().toISOString(), decidedByUid: user.uid, decidedByName: user.displayName || user.email, decidedByRole: role }, { merge: true }); renderApprovals(); });
+                 reject.addEventListener('click', async () => { approve.disabled = true; reject.disabled = true; await setDoc(doc(db, 'ClassRequests', r.id), { status: 'rejected', decidedAt: new Date().toISOString(), decidedByUid: user.uid, decidedByName: user.displayName || user.email, decidedByRole: role }, { merge: true }); renderApprovals(); });
+                 actions.appendChild(approve); actions.appendChild(reject);
+                 row.appendChild(actions);
+               }
+               approvalsList.appendChild(row);
+             });
+           }
+           filterSubject.addEventListener('input', renderApprovals);
+           filterStatus.addEventListener('change', renderApprovals);
+           renderApprovals();
+         }
+         loadApprovals();
+
+         // ========== TAB 2: TUTORING REQUESTS ==========
+         async function loadRequests() {
+           const container = panels.requests;
+           container.innerHTML = '<h2>All Tutoring Requests</h2><div class="filters"><input id="filterReqSubject" placeholder="Filter by subject/class..." /><button id="refreshReq">Refresh</button></div><div id="reqList"></div>';
+           const filterReqSubject = document.getElementById('filterReqSubject');
+           const reqList = document.getElementById('reqList');
+           document.getElementById('refreshReq').addEventListener('click', renderRequests);
+
+           async function renderRequests() {
+             reqList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'Requests'));
+             const items = [];
+             snap.forEach(d => { const r = d.data() || {}; items.push({ id: d.id, ...r }); });
+             
+             let filtered = items;
+             const subFilter = filterReqSubject.value.toLowerCase().trim();
+             if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter) || (r.name||'').toLowerCase().includes(subFilter));
+             
+             reqList.innerHTML = '';
+             if (filtered.length === 0) {
+               reqList.innerHTML = '<div class="empty">No tutoring requests found.</div>';
+               return;
+             }
+             filtered.forEach((r) => {
+               const row = document.createElement('div');
+               row.className = 'item';
+               const avail = Array.isArray(r.availability) ? r.availability.map(s => `${s.date} Day${s.cycleDay} ${s.block}`).join(', ') : 'N/A';
+               row.innerHTML = `
+                 <div class="grow">
+                   <div><strong>${r.name || 'Student'}</strong> • ${r.email || ''}</div>
+                   <div style="margin-top:4px">${r.subject} — ${r.class} <span class="pill">Grade ${r.grade||'?'}</span></div>
+                   <div style="font-size:13px;color:#6b7280;margin-top:4px">Topic: ${r.topic || '—'} | Location: ${r.location || '—'}</div>
+                   <div style="font-size:12px;color:#9ca3af;margin-top:2px">Availability: ${avail}</div>
+                 </div>
+                 <div class="right">
+                   <button class="btn danger" data-id="${r.id}">Delete</button>
+                 </div>
+               `;
+               row.querySelector('.btn.danger').addEventListener('click', async (e) => {
+                 if (!confirm('Delete this tutoring request?')) return;
+                 e.target.disabled = true;
+                 await deleteDoc(doc(db, 'Requests', r.id));
+                 renderRequests();
+               });
+               reqList.appendChild(row);
+             });
+           }
+           filterReqSubject.addEventListener('input', renderRequests);
+           renderRequests();
+         }
+
+         // ========== TAB 3: SESSIONS ==========
+         async function loadSessions() {
+           const container = panels.sessions;
+           container.innerHTML = '<h2>All Sessions</h2><div class="filters"><select id="filterSessionStatus"><option value="">All</option><option value="scheduled">Scheduled</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select><input id="filterSessionSubject" placeholder="Filter by subject/tutor/student..." /><button id="refreshSessions">Refresh</button></div><div id="sessionsList"></div>';
+           const filterSessionStatus = document.getElementById('filterSessionStatus');
+           const filterSessionSubject = document.getElementById('filterSessionSubject');
+           const sessionsList = document.getElementById('sessionsList');
+           document.getElementById('refreshSessions').addEventListener('click', renderSessions);
+
+           async function renderSessions() {
+             sessionsList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'Sessions'));
+             const items = [];
+             snap.forEach(d => { const s = d.data() || {}; items.push({ id: d.id, ...s }); });
+             
+             let filtered = items;
+             const statFilter = filterSessionStatus.value;
+             const subFilter = filterSessionSubject.value.toLowerCase().trim();
+             if (statFilter) filtered = filtered.filter(s => s.status === statFilter);
+             if (subFilter) filtered = filtered.filter(s => (s.subject||'').toLowerCase().includes(subFilter) || (s.tutorName||'').toLowerCase().includes(subFilter) || (s.name||'').toLowerCase().includes(subFilter));
+             
+             filtered.sort((a,b) => {
+               const aDate = new Date(a.slot?.date||0);
+               const bDate = new Date(b.slot?.date||0);
+               return bDate - aDate;
+             });
+             sessionsList.innerHTML = '';
+             if (filtered.length === 0) {
+               sessionsList.innerHTML = '<div class="empty">No sessions found.</div>';
+               return;
+             }
+             filtered.forEach((s) => {
+               const row = document.createElement('div');
+               row.className = 'item';
+               const statusClass = s.status === 'scheduled' ? 'scheduled' : s.status === 'completed' ? 'approved' : 'rejected';
+               const slotLabel = `${s.slot?.date||'?'} Day ${s.slot?.cycleDay||'?'} ${s.slot?.block||'?'}`;
+               row.innerHTML = `
+                 <div class="grow">
+                   <div><strong>${s.name || 'Student'}</strong> • ${s.email || ''} <span class="pill ${statusClass}">${s.status||'scheduled'}</span></div>
+                   <div style="margin-top:4px">${s.subject} — ${s.class} | Tutor: ${s.tutorName || '—'}</div>
+                   <div style="font-size:13px;color:#6b7280;margin-top:4px">Slot: ${slotLabel} | Location: ${s.location || '—'}</div>
+                 </div>
+                 <div class="right">
+                   <button class="btn danger" data-id="${s.id}">Delete</button>
+                 </div>
+               `;
+               row.querySelector('.btn.danger').addEventListener('click', async (e) => {
+                 if (!confirm('Delete this session?')) return;
+                 e.target.disabled = true;
+                 await deleteDoc(doc(db, 'Sessions', s.id));
+                 renderSessions();
+               });
+               sessionsList.appendChild(row);
+             });
+           }
+           filterSessionStatus.addEventListener('change', renderSessions);
+           filterSessionSubject.addEventListener('input', renderSessions);
+           renderSessions();
+         }
+
+         // ========== TAB 4: USERS & ROLES ==========
+         async function loadUsers() {
+           const container = panels.users;
+           container.innerHTML = '<h2>Users & Roles</h2><p style="color:#6b7280;font-size:14px">Click Edit to modify user details, or Add User to create a new account.</p><div class="filters"><input id="filterUser" placeholder="Search by name/email..." /><button id="refreshUsers">Refresh</button><button id="addUser" class="btn primary" style="margin-left:auto">+ Add User</button></div><div id="usersList"></div>';
+           const filterUser = document.getElementById('filterUser');
+           const usersList = document.getElementById('usersList');
+           document.getElementById('refreshUsers').addEventListener('click', renderUsers);
+
+           const roleOptions = ['student', 'Admin', 'Head', 'Developer', 'Math Lead', 'Science Lead', 'English Lead', 'History Lead', 'World Language Lead', 'Computer Science Lead'];
+
+           document.getElementById('addUser').addEventListener('click', async () => {
+             const name = prompt('Enter full name:');
+             if (!name) return;
+             const email = prompt('Enter @hwemail.com email:');
+             if (!email || !email.endsWith('@hwemail.com')) { alert('Invalid email'); return; }
+             const password = prompt('Enter temporary password (min 6 chars):');
+             if (!password || password.length < 6) { alert('Password must be at least 6 characters'); return; }
+             
+             try {
+               // Note: Client SDK can't create users directly; this requires Admin SDK
+               // Workaround: User must sign up via signup.html, or we need a Cloud Function
+               alert('To add users, either:\\n1. Have them sign up at signup.html\\n2. Create a Cloud Function for admin user creation\\n\\nFor now, you can manually edit an existing user or wait for them to sign up.');
+             } catch (e) {
+               alert('Error: ' + (e.message || 'Failed to create user'));
+             }
+           });
+
+           async function renderUsers() {
+             usersList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'users'));
+             const items = [];
+             snap.forEach(d => { 
+               const u = d.data() || {};
+               if (!u.deleted) items.push({ uid: d.id, ...u });
+             });
+             
+             let filtered = items;
+             const userFilter = filterUser.value.toLowerCase().trim();
+             if (userFilter) filtered = filtered.filter(u => (u.name||'').toLowerCase().includes(userFilter) || (u.email||'').toLowerCase().includes(userFilter));
+             
+             filtered.sort((a,b) => String(a.name||a.email).localeCompare(String(b.name||b.email)));
+             usersList.innerHTML = '';
+             if (filtered.length === 0) {
+               usersList.innerHTML = '<div class="empty">No users found.</div>';
+               return;
+             }
+             
+             const table = document.createElement('table');
+             table.innerHTML = '<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Grade</th><th>Classes</th><th>Actions</th></tr></thead><tbody></tbody>';
+             const tbody = table.querySelector('tbody');
+             filtered.forEach((u, idx) => {
+               const tr = document.createElement('tr');
+               tr.className = 'user-row';
+               const classes = Array.isArray(u.classes) ? u.classes.slice(0,3).join(', ') + (u.classes.length > 3 ? '...' : '') : (u.classes||'—');
+               const currentRole = u.role || 'student';
+               
+               tr.innerHTML = `
+                 <td>${u.name || '—'}</td>
+                 <td>${u.email || '—'}</td>
+                 <td><span class="pill">${currentRole}</span></td>
+                 <td>${u.grade || '—'}</td>
+                 <td style="font-size:12px;color:#6b7280">${classes}</td>
+                 <td><button class="btn" data-uid="${u.uid}">Edit</button></td>
+               `;
+               
+               const detailTr = document.createElement('tr');
+               detailTr.className = 'user-detail';
+               detailTr.id = `detail-${u.uid}`;
+               const detailTd = document.createElement('td');
+               detailTd.colSpan = 6;
+               
+               const roleDropdown = roleOptions.map(r => `<option value="${r}" ${r === currentRole ? 'selected' : ''}>${r}</option>`).join('');
+               const classesText = Array.isArray(u.classes) ? u.classes.join(', ') : '';
+               
+               detailTd.innerHTML = `
+                 <div style="max-width:800px">
+                   <h3 style="margin:0 0 12px">Edit User: ${u.name || u.email || 'User'}</h3>
+                   <div class="field-row">
+                     <label>Name</label>
+                     <input id="name-${u.uid}" value="${u.name || ''}" />
+                   </div>
+                   <div class="field-row">
+                     <label>Email</label>
+                     <input id="email-${u.uid}" value="${u.email || ''}" disabled style="background:#f3f4f6;cursor:not-allowed" />
+                   </div>
+                   <div class="field-row">
+                     <label>Role</label>
+                     <select id="role-${u.uid}">${roleDropdown}</select>
+                   </div>
+                   <div class="field-row">
+                     <label>Grade</label>
+                     <select id="grade-${u.uid}">
+                       <option value="">None</option>
+                       <option value="10" ${u.grade==='10'?'selected':''}>10</option>
+                       <option value="11" ${u.grade==='11'?'selected':''}>11</option>
+                       <option value="12" ${u.grade==='12'?'selected':''}>12</option>
+                     </select>
+                   </div>
+                   <div class="field-row">
+                     <label>Classes (comma-separated)</label>
+                     <textarea id="classes-${u.uid}" rows="3" placeholder="Geometry, AP Calculus AB, ...">${classesText}</textarea>
+                   </div>
+                   <div style="display:flex;gap:8px;margin-top:12px">
+                     <button class="btn primary" id="save-${u.uid}">Save All Changes</button>
+                     <button class="btn" id="cancel-${u.uid}">Cancel</button>
+                     <button class="btn danger" id="delete-${u.uid}" style="margin-left:auto">Delete User</button>
+                   </div>
+                 </div>
+               `;
+               detailTr.appendChild(detailTd);
+               
+               tbody.appendChild(tr);
+               tbody.appendChild(detailTr);
+               
+               tr.querySelector('.btn').addEventListener('click', () => {
+                 const detail = document.getElementById(`detail-${u.uid}`);
+                 detail.classList.toggle('open');
+               });
+               
+               const saveBtn = detailTd.querySelector(`#save-${u.uid}`);
+               const cancelBtn = detailTd.querySelector(`#cancel-${u.uid}`);
+               const deleteBtn = detailTd.querySelector(`#delete-${u.uid}`);
+               
+               cancelBtn.addEventListener('click', () => {
+                 document.getElementById(`detail-${u.uid}`).classList.remove('open');
+               });
+               
+               deleteBtn.addEventListener('click', async () => {
+                 if (!confirm(`Delete user ${u.name || u.email}? This will remove their Firestore data but NOT their Firebase Auth account (they can still sign in but will have no profile).`)) return;
+                 deleteBtn.disabled = true;
+                 deleteBtn.textContent = 'Deleting...';
+                 try {
+                   await setDoc(doc(db, 'users', u.uid), { deleted: true, deletedAt: new Date().toISOString(), deletedBy: user.uid }, { merge: true });
+                   alert('User marked as deleted. To fully remove Firebase Auth account, use Firebase Console or Admin SDK.');
+                   renderUsers();
+                 } catch (err) {
+                   console.error('Delete error:', err);
+                   alert('Error: ' + (err.message || 'Failed to delete'));
+                   deleteBtn.disabled = false;
+                   deleteBtn.textContent = 'Delete User';
+                 }
+               });
+               
+               saveBtn.addEventListener('click', async () => {
+                 saveBtn.disabled = true;
+                 saveBtn.textContent = 'Saving...';
+                 try {
+                   const name = document.getElementById(`name-${u.uid}`).value.trim();
+                   const role = document.getElementById(`role-${u.uid}`).value;
+                   const grade = document.getElementById(`grade-${u.uid}`).value;
+                   const classesRaw = document.getElementById(`classes-${u.uid}`).value;
+                   const classes = classesRaw.split(',').map(c => c.trim()).filter(Boolean);
+                   
+                   await setDoc(doc(db, 'users', u.uid), {
+                     name: name || null,
+                     role: role,
+                     grade: grade || null,
+                     classes: classes
+                   }, { merge: true });
+                   
+                   saveBtn.textContent = '✓ Saved';
+                   setTimeout(() => {
+                     saveBtn.textContent = 'Save All Changes';
+                     saveBtn.disabled = false;
+                     renderUsers();
+                   }, 1000);
+                 } catch (err) {
+                   console.error('Save error:', err);
+                   saveBtn.textContent = 'Error - ' + (err.message || 'Failed');
+                   setTimeout(() => { saveBtn.textContent = 'Save All Changes'; saveBtn.disabled = false; }, 2000);
+                 }
+               });
+             });
+             usersList.appendChild(table);
+           }
+           filterUser.addEventListener('input', renderUsers);
+           renderUsers();
+         }
+
+         // ========== TAB 5: ANALYTICS ==========
+         async function loadAnalytics() {
+           const container = panels.analytics;
+           container.innerHTML = '<h2>Analytics & Reports</h2><div id="stats"></div><div style="margin-top:16px"><button id="exportCSV" class="btn primary">Export Sessions to CSV</button></div>';
+           const stats = document.getElementById('stats');
+           
+           // Compute stats
+           const [reqSnap, sessSnap, usersSnap] = await Promise.all([
+             getDocs(collection(db, 'Requests')),
+             getDocs(collection(db, 'Sessions')),
+             getDocs(collection(db, 'users'))
+           ]);
+           
+           const totalReqs = reqSnap.size;
+           const totalSess = sessSnap.size;
+           const totalUsers = usersSnap.size;
+           const bySubject = {};
+           sessSnap.forEach(d => {
+             const s = d.data() || {};
+             const subj = s.subject || 'Unknown';
+             bySubject[subj] = (bySubject[subj] || 0) + 1;
+           });
+           
+           const grid = document.createElement('div');
+           grid.className = 'stat-grid';
+           grid.innerHTML = `
+             <div class="stat-card"><div class="label">Total Tutoring Requests</div><div class="value">${totalReqs}</div></div>
+             <div class="stat-card"><div class="label">Total Sessions</div><div class="value">${totalSess}</div></div>
+             <div class="stat-card"><div class="label">Total Users</div><div class="value">${totalUsers}</div></div>
+           `;
+           Object.keys(bySubject).sort().forEach(subj => {
+             const card = document.createElement('div');
+             card.className = 'stat-card';
+             card.innerHTML = `<div class="label">${subj} Sessions</div><div class="value" style="font-size:22px">${bySubject[subj]}</div>`;
+             grid.appendChild(card);
+           });
+           stats.appendChild(grid);
+           
+           document.getElementById('exportCSV').addEventListener('click', () => {
+             const rows = [['Date','CycleDay','Block','Student','Email','Grade','Subject','Class','Topic','Location','Tutor','Status']];
+             sessSnap.forEach(d => {
+               const s = d.data() || {};
+               rows.push([
+                 s.slot?.date||'',s.slot?.cycleDay||'',s.slot?.block||'',s.name||'',s.email||'',s.grade||'',s.subject||'',s.class||'',s.topic||'',s.location||'',s.tutorName||'',s.status||''
+               ]);
+             });
+             const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+             const blob = new Blob([csv], { type: 'text/csv' });
+             const url = URL.createObjectURL(blob);
+             const a = document.createElement('a');
+             a.href = url;
+             a.download = `sessions_${new Date().toISOString().slice(0,10)}.csv`;
+             a.click();
+             URL.revokeObjectURL(url);
+           });
+         }
+
+         // Lazy-load other tabs
+         tabs.forEach(t => t.addEventListener('click', () => {
+           const tab = t.dataset.tab;
+           if (tab === 'requests' && panels.requests.innerHTML.includes('Coming soon')) loadRequests();
+           if (tab === 'sessions' && panels.sessions.innerHTML.includes('Coming soon')) loadSessions();
+           if (tab === 'users' && panels.users.innerHTML.includes('Coming soon')) loadUsers();
+           if (tab === 'analytics' && panels.analytics.innerHTML.includes('Coming soon')) loadAnalytics();
+         }));
+
+         // Stub other panels until clicked
+         panels.requests.innerHTML = 'Coming soon...';
+         panels.sessions.innerHTML = 'Coming soon...';
+         panels.users.innerHTML = 'Coming soon...';
+         panels.analytics.innerHTML = 'Coming soon...';
+
+       } catch (e) {
+         navigated = true;
+         const url = new URL('board.html', window.location.href);
+         url.searchParams.set('err', 'admin_denied');
+         window.location.replace(url.toString());
+         return;
+       }
+      });
+    </script>
+  </body>
+  </html>

@@ -425,7 +425,9 @@
         appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
         measurementId: "G-PF9F78SKZV",
       };
-      firebase.initializeApp(firebaseConfig);
+      if (!firebase.apps || !firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
       const db = firebase.firestore();
 
       // ===== Class options (unchanged) =====

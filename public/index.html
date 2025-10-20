@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PEER TUTORING JOB BOARD</title>
     <script src="common-auth.js"></script>
+    <script src="firebase-config.js"></script>
     <style>
       /* General body styling */
       body {
@@ -107,11 +108,47 @@
     <h1>PEER TUTORING JOB BOARD</h1>
 
     <!-- Container for the buttons and additional text -->
+    <div id="banner" style="display:none;max-width:450px;color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;padding:10px 12px;border-radius:8px;margin-top:12px"></div>
     <div class="box">
       <!-- Buttons -->
       <a href="request.html" class="button">I'm a student!</a>
       <a href="signin.html" class="button">I'm a tutor!</a>
-      <a href="admin.html" class="button">I'm an admin!</a>
+      <a id="adminBtn" href="#" class="button">I'm an admin!</a>
     </div>
+    <script>
+      // Pre-auth navigation guards: decide before following admin link
+      (function(){
+        const adminBtn = document.getElementById('adminBtn');
+        const banner = document.getElementById('banner');
+        adminBtn.addEventListener('click', function(ev){
+          ev.preventDefault();
+          // Lazy load compat SDK to avoid blocking paint
+          const s1 = document.createElement('script'); s1.src = 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js';
+          const s2 = document.createElement('script'); s2.src = 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js';
+          const s3 = document.createElement('script'); s3.src = 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js';
+          let loaded = 0; function go(){ if(++loaded<3) return; proceed(); }
+          s1.onload = go; s2.onload = go; s3.onload = go;
+          document.head.appendChild(s1); document.head.appendChild(s2); document.head.appendChild(s3);
+          function proceed(){
+            if (!firebase.apps.length) firebase.initializeApp(window.__FIREBASE_CONFIG__);
+            const auth = firebase.auth();
+            const db = firebase.firestore();
+            auth.onAuthStateChanged(async function(u){
+              if(!u){ window.location.href = 'signin.html?next=admin.html'; return; }
+              try{
+                const d = await db.collection('users').doc(u.uid).get();
+                const role = d.exists ? (d.data().role||null) : null;
+                if(role === 'Admin' || role === 'Head' || role === 'Developer'){
+                  window.location.href = 'admin.html';
+                } else {
+                  banner.textContent = "You don't have permission to view the admin page.";
+                  banner.style.display = 'block';
+                }
+              }catch(e){ window.location.href='signin.html?next=admin.html'; }
+            });
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
