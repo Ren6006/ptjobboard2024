@@ -69,12 +69,14 @@
         <button class="tab active" data-tab="approvals">Class Approvals</button>
         <button class="tab" data-tab="requests">Tutoring Requests</button>
         <button class="tab" data-tab="sessions">Sessions</button>
+        <button class="tab" data-tab="hours">Hours</button>
         <button class="tab" data-tab="users">Users & Roles</button>
         <button class="tab" data-tab="analytics">Analytics</button>
       </div>
       <div id="approvals" class="panel"></div>
       <div id="requests" class="panel" style="display:none"></div>
       <div id="sessions" class="panel" style="display:none"></div>
+      <div id="hours" class="panel" style="display:none"></div>
       <div id="users" class="panel" style="display:none"></div>
       <div id="analytics" class="panel" style="display:none"></div>
     </div>
@@ -91,7 +93,7 @@
 
       const who = document.getElementById('who');
       const tabs = document.querySelectorAll('.tab');
-       const panels = { approvals: document.getElementById('approvals'), requests: document.getElementById('requests'), sessions: document.getElementById('sessions'), users: document.getElementById('users'), analytics: document.getElementById('analytics') };
+       const panels = { approvals: document.getElementById('approvals'), requests: document.getElementById('requests'), sessions: document.getElementById('sessions'), hours: document.getElementById('hours'), users: document.getElementById('users'), analytics: document.getElementById('analytics') };
        const shell = document.querySelector('.shell');
        const loadingBanner = document.getElementById('loadingBanner');
       
@@ -136,8 +138,9 @@
          // ========== TAB 1: CLASS APPROVALS ==========
          async function loadApprovals() {
            const approvals = panels.approvals;
-           approvals.innerHTML = '<h2>Class Approval Requests</h2><div class="filters"><input id="filterSubject" placeholder="Filter by subject..." /><select id="filterStatus"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><button id="refreshApprovals">Refresh</button></div><div id="approvalsList"></div>';
+           approvals.innerHTML = '<h2>Class Approval Requests</h2><div class="filters"><input id="filterSubject" placeholder="Filter by subject..." /><input id="filterUser" placeholder="Search by name or email..." /><select id="filterStatus"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><button id="refreshApprovals">Refresh</button><div style="margin-left:auto;display:flex;align-items:center;gap:14px;font-size:14px;color:#6b7280;border-left:1px solid #e5e7eb;padding-left:14px"><span style="display:flex;align-items:center;gap:6px"><span style="color:#f59e0b;font-size:16px">●</span> Pending</span><span style="display:flex;align-items:center;gap:6px"><span style="color:#10b981;font-size:16px">●</span> All Approved</span><span style="display:flex;align-items:center;gap:6px"><span style="color:#ef4444;font-size:16px">●</span> Only Rejected</span></div></div><div id="approvalsList"></div>';
            const filterSubject = document.getElementById('filterSubject');
+           const filterUser = document.getElementById('filterUser');
            const filterStatus = document.getElementById('filterStatus');
            const approvalsList = document.getElementById('approvalsList');
            document.getElementById('refreshApprovals').addEventListener('click', renderApprovals);
@@ -150,8 +153,10 @@
             
             let filtered = items;
             const subFilter = filterSubject.value.toLowerCase().trim();
+            const userFilter = filterUser.value.toLowerCase().trim();
             const statFilter = filterStatus.value;
             if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter));
+            if (userFilter) filtered = filtered.filter(r => (r.userName||'').toLowerCase().includes(userFilter) || (r.userEmail||'').toLowerCase().includes(userFilter));
             if (statFilter) filtered = filtered.filter(r => r.status === statFilter);
             
             // Group by user
@@ -193,10 +198,18 @@
                 rejected: userData.requests.filter(r => r.status === 'rejected').length
               };
               
+              // Determine bullet color: yellow if any pending, green if all approved, red if only rejected
+              const getBulletColor = () => {
+                if (counts.pending > 0) return '#f59e0b'; // yellow/amber
+                if (counts.approved === userData.requests.length) return '#10b981'; // green
+                if (counts.rejected > 0 && counts.approved === 0 && counts.pending === 0) return '#ef4444'; // red (only rejected)
+                return '#6b7280'; // default gray
+              };
+              
               userHeader.innerHTML = `
                 <div class="grow">
                   <div style="display:flex;align-items:center;gap:8px">
-                    <span style="font-size:14px" id="arrow-${idx}">●</span>
+                    <span style="font-size:14px;color:${getBulletColor()}" id="arrow-${idx}">●</span>
                     <strong>${userData.name}</strong> • ${userData.email}
                   </div>
                   <div style="margin-top:4px;font-size:13px;color:#6b7280">
@@ -273,6 +286,20 @@
                     counts.pending--;
                     counts.approved++;
                     
+                    // Update bullet color
+                    const arrow = document.getElementById(`arrow-${idx}`);
+                    if (arrow) {
+                      if (counts.pending > 0) {
+                        arrow.style.color = '#f59e0b'; // yellow
+                      } else if (counts.approved === userData.requests.length) {
+                        arrow.style.color = '#10b981'; // green
+                      } else if (counts.rejected > 0 && counts.approved === 0 && counts.pending === 0) {
+                        arrow.style.color = '#ef4444'; // red (only rejected)
+                      } else {
+                        arrow.style.color = '#6b7280'; // gray
+                      }
+                    }
+                    
                     // Update counts in header
                     const headerCounts = userHeader.querySelector('.grow > div:nth-child(2)');
                     const totalClasses = userData.requests.length;
@@ -308,6 +335,20 @@
                     counts.pending--;
                     counts.rejected++;
                     
+                    // Update bullet color
+                    const arrow = document.getElementById(`arrow-${idx}`);
+                    if (arrow) {
+                      if (counts.pending > 0) {
+                        arrow.style.color = '#f59e0b'; // yellow
+                      } else if (counts.approved === userData.requests.length) {
+                        arrow.style.color = '#10b981'; // green
+                      } else if (counts.rejected > 0 && counts.approved === 0 && counts.pending === 0) {
+                        arrow.style.color = '#ef4444'; // red (only rejected)
+                      } else {
+                        arrow.style.color = '#6b7280'; // gray
+                      }
+                    }
+                    
                     // Update counts in header
                     const headerCounts = userHeader.querySelector('.grow > div:nth-child(2)');
                     const totalClasses = userData.requests.length;
@@ -340,6 +381,7 @@
             });
           }
            filterSubject.addEventListener('input', renderApprovals);
+           filterUser.addEventListener('input', renderApprovals);
            filterStatus.addEventListener('change', renderApprovals);
            renderApprovals();
          }
@@ -456,7 +498,135 @@
            renderSessions();
          }
 
-         // ========== TAB 4: USERS & ROLES ==========
+         // ========== TAB 4: HOURS ==========
+         async function loadHours() {
+           const container = panels.hours;
+           container.innerHTML = '<h2>Tutor Hours</h2><div class="filters"><input id="filterHourUser" placeholder="Search by name or email..." /><button id="refreshHours">Refresh</button></div><div id="hoursList"></div>';
+           const filterHourUser = document.getElementById('filterHourUser');
+           const hoursList = document.getElementById('hoursList');
+           document.getElementById('refreshHours').addEventListener('click', renderHours);
+
+           const blocksCatalog = {
+             "1": "Block 1", "M11": "Junior Seminar", "2": "Block 2", "L": "Lunch",
+             "3": "Block 3", "DS": "DS", "CC": "CC (3:15-4:00)", "4": "Block 4",
+             "M10": "Soph. Seminar", "5": "Block 5", "6": "Block 6", "7": "Block 7",
+             "FC": "Faculty Collaboration", "M12": "Senior Seminar", "CT": "Community Time",
+             "OH": "Office Hours",
+           };
+
+           async function renderHours() {
+             hoursList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'Hours'));
+             const items = [];
+             snap.forEach(d => { const h = d.data() || {}; items.push({ id: d.id, ...h }); });
+             
+             let filtered = items;
+             const userFilter = filterHourUser.value.toLowerCase().trim();
+             if (userFilter) filtered = filtered.filter(h => (h.tutorName||'').toLowerCase().includes(userFilter) || (h.tutorEmail||'').toLowerCase().includes(userFilter));
+             
+             // Group by tutor
+             const byTutor = {};
+             filtered.forEach(h => {
+               const key = h.tutorEmail || h.tutorUid || 'unknown';
+               if (!byTutor[key]) {
+                 byTutor[key] = {
+                   name: h.tutorName || h.tutorEmail || 'Unknown',
+                   email: h.tutorEmail || '',
+                   uid: h.tutorUid || '',
+                   hours: []
+                 };
+               }
+               byTutor[key].hours.push(h);
+             });
+             
+             // Sort tutors by name
+             const tutorList = Object.values(byTutor).sort((a,b) => a.name.localeCompare(b.name));
+             
+             hoursList.innerHTML = '';
+             if (tutorList.length === 0) {
+               hoursList.innerHTML = '<div class="empty">No hours found.</div>';
+               return;
+             }
+             
+             tutorList.forEach((tutorData, idx) => {
+               const tutorContainer = document.createElement('div');
+               tutorContainer.style.marginBottom = '12px';
+               
+               // Sort hours by date (most recent first)
+               tutorData.hours.sort((a,b) => {
+                 const aDate = new Date(a.date || 0);
+                 const bDate = new Date(b.date || 0);
+                 return bDate - aDate;
+               });
+               
+               const totalHours = tutorData.hours.length;
+               const selfReported = tutorData.hours.filter(h => h.type === 'self_reported').length;
+               const autoTracked = tutorData.hours.filter(h => h.type === 'completed_session').length;
+               
+               // Tutor header (clickable)
+               const tutorHeader = document.createElement('div');
+               tutorHeader.className = 'item';
+               tutorHeader.style.cursor = 'pointer';
+               
+               tutorHeader.innerHTML = `
+                 <div class="grow">
+                   <div style="display:flex;align-items:center;gap:8px">
+                     <span style="font-size:14px" id="hour-arrow-${idx}">●</span>
+                     <strong>${tutorData.name}</strong> • ${tutorData.email}
+                   </div>
+                   <div style="margin-top:4px;font-size:13px;color:#6b7280">
+                     ${totalHours} hour${totalHours !== 1 ? 's' : ''} 
+                     ${autoTracked > 0 ? `(${autoTracked} auto-tracked)` : ''}
+                     ${selfReported > 0 ? `(${selfReported} self-reported)` : ''}
+                   </div>
+                 </div>
+               `;
+               
+               // Hours list (hidden by default)
+               const hourDetailsList = document.createElement('div');
+               hourDetailsList.id = `hour-details-${idx}`;
+               hourDetailsList.style.display = 'none';
+               hourDetailsList.style.marginLeft = '32px';
+               hourDetailsList.style.marginTop = '8px';
+               
+               tutorData.hours.forEach(h => {
+                 const hourRow = document.createElement('div');
+                 hourRow.className = 'item';
+                 hourRow.style.marginBottom = '6px';
+                 const blockName = blocksCatalog[h.block] || h.block;
+                 const typeClass = h.type === 'self_reported' ? 'pending' : 'approved';
+                 const typeLabel = h.type === 'self_reported' ? 'Self-Reported' : 'Auto-Tracked';
+                 
+                 hourRow.innerHTML = `
+                   <div class="grow">
+                     <div><strong>${h.date || 'N/A'}</strong> • Day ${h.cycleDay || '?'} • ${blockName} <span class="pill ${typeClass}">${typeLabel}</span></div>
+                     ${h.subject ? `<div style="font-size:12px;color:#6b7280;margin-top:4px">${h.subject}${h.class ? ` — ${h.class}` : ''}</div>` : ''}
+                     ${h.description ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">${h.description}</div>` : ''}
+                     ${h.studentName ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">Student: ${h.studentName}</div>` : ''}
+                     <div style="font-size:11px;color:#9ca3af;margin-top:2px">Added: ${h.createdAt || 'N/A'}</div>
+                   </div>
+                 `;
+                 
+                 hourDetailsList.appendChild(hourRow);
+               });
+               
+               // Toggle expand/collapse
+               tutorHeader.addEventListener('click', () => {
+                 const isOpen = hourDetailsList.style.display !== 'none';
+                 hourDetailsList.style.display = isOpen ? 'none' : 'block';
+                 document.getElementById(`hour-arrow-${idx}`).textContent = isOpen ? '●' : '○';
+               });
+               
+               tutorContainer.appendChild(tutorHeader);
+               tutorContainer.appendChild(hourDetailsList);
+               hoursList.appendChild(tutorContainer);
+             });
+           }
+           filterHourUser.addEventListener('input', renderHours);
+           renderHours();
+         }
+
+         // ========== TAB 5: USERS & ROLES ==========
          async function loadUsers() {
            const container = panels.users;
            container.innerHTML = '<h2>Users & Roles</h2><p style="color:#6b7280;font-size:14px">Click Edit to modify user details, or Add User to create a new account.</p><div class="filters"><input id="filterUser" placeholder="Search by name/email..." /><button id="refreshUsers">Refresh</button><button id="addUser" class="btn primary" style="margin-left:auto">+ Add User</button></div><div id="usersList"></div>';
@@ -469,8 +639,8 @@
            document.getElementById('addUser').addEventListener('click', async () => {
              const name = prompt('Enter full name:');
              if (!name) return;
-             const email = prompt('Enter @hwemail.com email:');
-             if (!email || !email.endsWith('@hwemail.com')) { alert('Invalid email'); return; }
+             const email = prompt('Enter @hwemail.com or @hw.com email:');
+             if (!email || !(email.endsWith('@hwemail.com') || email.endsWith('@hw.com'))) { alert('Invalid email'); return; }
              const password = prompt('Enter temporary password (min 6 chars):');
              if (!password || password.length < 6) { alert('Password must be at least 6 characters'); return; }
              
@@ -697,6 +867,7 @@
            const tab = t.dataset.tab;
            if (tab === 'requests' && panels.requests.innerHTML.includes('Coming soon')) loadRequests();
            if (tab === 'sessions' && panels.sessions.innerHTML.includes('Coming soon')) loadSessions();
+           if (tab === 'hours' && panels.hours.innerHTML.includes('Coming soon')) loadHours();
            if (tab === 'users' && panels.users.innerHTML.includes('Coming soon')) loadUsers();
            if (tab === 'analytics' && panels.analytics.innerHTML.includes('Coming soon')) loadAnalytics();
          }));
@@ -704,6 +875,7 @@
          // Stub other panels until clicked
          panels.requests.innerHTML = 'Coming soon...';
          panels.sessions.innerHTML = 'Coming soon...';
+         panels.hours.innerHTML = 'Coming soon...';
          panels.users.innerHTML = 'Coming soon...';
          panels.analytics.innerHTML = 'Coming soon...';
 

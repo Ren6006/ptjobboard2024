@@ -2,6 +2,7 @@
 
 // ---- Imports (ESM at top) ----
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";   // Admin init for ref.get()
 import { google } from "googleapis";
@@ -307,6 +308,126 @@ export const onClassRequestApproved = onDocumentUpdated(
       }
     } catch (err) {
       console.error("Failed to grant approved class", err);
+    }
+  }
+);
+
+// Auto-add hour when a tutoring session is completed
+export const onSessionCompleted = onDocumentUpdated(
+  {
+    document: "Sessions/{sessionId}",
+    region: "us-central1",
+    timeoutSeconds: 540,
+  },
+  async (event) => {
+    const before = event.data?.before;
+    const after = event.data?.after;
+    if (!before || !after) return;
+    const prev = before.data() || {};
+    const curr = after.data() || {};
+
+    // Only trigger when status changes from scheduled to completed
+    if (prev.status === "completed" || curr.status !== "completed") return;
+
+    const tutorUid = curr.tutorUid;
+    const tutorName = curr.tutorName;
+    const slot = curr.slot || {};
+    
+    if (!tutorUid || !slot.date || !slot.cycleDay || !slot.block) {
+      console.error("Missing required fields for hour tracking");
+      return;
+    }
+
+    try {
+      // Add an hour entry to the Hours collection
+      await db.collection("Hours").add({
+        tutorUid,
+        tutorName: tutorName || null,
+        tutorEmail: curr.tutorEmail || null,
+        date: slot.date,
+        cycleDay: slot.cycleDay,
+        block: slot.block,
+        subject: curr.subject || null,
+        class: curr.class || null,
+        studentName: curr.name || null,
+        type: "completed_session", // vs "self_reported"
+        sessionId: event.params.sessionId,
+        createdAt: new Date().toISOString(),
+      });
+      console.log(`Added hour for tutor ${tutorName} (${tutorUid})`);
+    } catch (err) {
+      console.error("Failed to add hour entry", err);
+    }
+  }
+);
+
+// Scheduled function to auto-complete sessions after their date has passed
+// Runs daily at 2 AM (US Central Time)
+export const autoCompletePassedSessions = onSchedule(
+  {
+    schedule: "0 2 * * *", // Daily at 2 AM
+    timeZone: "America/Chicago", // US Central Time
+    region: "us-central1",
+    timeoutSeconds: 540,
+  },
+  async () => {
+    console.log("Running auto-complete for passed sessions...");
+    
+    try {
+      // Get today's date at midnight (start of day)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Query all scheduled sessions
+      const sessionsSnap = await db.collection("Sessions").where("status", "==", "scheduled").get();
+      
+      if (sessionsSnap.empty) {
+        console.log("No scheduled sessions found");
+        return;
+      }
+      
+      let completedCount = 0;
+      const batch = db.batch();
+      
+      sessionsSnap.forEach((doc) => {
+        const session = doc.data() || {};
+        const sessionDate = session.slot?.date;
+        
+        if (!sessionDate) {
+          console.log(`Session ${doc.id} has no date, skipping`);
+          return;
+        }
+        
+        // Parse the date (MM/DD/YYYY format)
+        const dateParts = sessionDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (!dateParts) {
+          console.log(`Session ${doc.id} has invalid date format: ${sessionDate}`);
+          return;
+        }
+        
+        const [, month, day, year] = dateParts.map(Number);
+        const sessionDateObj = new Date(year, month - 1, day);
+        sessionDateObj.setHours(0, 0, 0, 0);
+        
+        // If the session date is before today, mark it as completed
+        if (sessionDateObj < today) {
+          batch.update(doc.ref, { 
+            status: "completed",
+            autoCompletedAt: new Date().toISOString()
+          });
+          completedCount++;
+          console.log(`Marking session ${doc.id} as completed (date: ${sessionDate})`);
+        }
+      });
+      
+      if (completedCount > 0) {
+        await batch.commit();
+        console.log(`Successfully auto-completed ${completedCount} session(s)`);
+      } else {
+        console.log("No sessions needed to be auto-completed");
+      }
+    } catch (err) {
+      console.error("Error in autoCompletePassedSessions:", err);
     }
   }
 );

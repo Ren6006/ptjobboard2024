@@ -174,7 +174,7 @@
         color: #fff;
         font-weight: 600;
         cursor: pointer;
-        box-shadow: 0 6px 14px rgba(26, 87, 214, 0.25);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       }
       button.primary:hover {
         background: var(--brand-dark);
@@ -236,6 +236,22 @@
       <div id="completed-loading" class="hidden">Loading sessions…</div>
       <div id="completed"></div>
 
+      <!-- NEW: Self-Report Hours -->
+      <div class="header" style="margin-top: 24px">
+        <h1>Self-Report Hours</h1>
+        <p style="color: var(--muted)">Add tutoring hours that weren't tracked automatically.</p>
+      </div>
+      <div style="background: var(--card); border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 12px 0;">
+        <button id="addHourBtn" class="primary">+ Add Hour</button>
+      </div>
+
+      <!-- NEW: My Hours Breakdown -->
+      <div class="header" style="margin-top: 24px">
+        <h1>My Hours</h1>
+      </div>
+      <div id="hours-loading" class="hidden">Loading hours…</div>
+      <div id="hours"></div>
+
       <!-- Subject Lead / Head Console (conditional) -->
       <div id="lead-console" class="hidden">
         <div class="header" style="margin-top: 24px">
@@ -260,6 +276,43 @@
         </div>
         <div id="lead-completed-loading" class="hidden">Loading sessions…</div>
         <div id="lead-completed"></div>
+      </div>
+    </div>
+
+    <!-- Add Hour Modal -->
+    <div id="addHourModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:100; align-items:center; justify-content:center; padding:20px;">
+      <div style="width:min(600px, 96vw); background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+        <div style="padding:14px 16px; border-bottom:1px solid #eee; display:flex; align-items:center; justify-content:space-between;">
+          <h3 style="margin:0; font-size:1.05rem;">Add Hour</h3>
+          <button id="closeHourModal" style="border:0; background:transparent; font-size:24px; cursor:pointer; padding:0 8px;">×</button>
+        </div>
+        <div style="padding:16px;">
+          <div style="display:grid; gap:12px;">
+            <div>
+              <label style="display:block; font-size:12px; color:#5b667a; margin-bottom:6px;">Date</label>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <input type="date" id="hourDate" style="position:absolute; width:1px; height:1px; margin:-1px; padding:0; border:0; clip:rect(0 0 0 0); overflow:hidden;" />
+                <button type="button" id="hourCalendarBtn" style="display:inline-flex; align-items:center; justify-content:center; width:64px; height:64px; border:2px solid #cbd5e1; border-radius:12px; background:#fff; cursor:pointer; font-size:28px;">📅</button>
+                <span id="hourCalendarLabel" style="font-size:14px; color:#334155;">Pick a date</span>
+              </div>
+              <div id="hourDayLabel" style="margin-top:6px; color:#94a3b8; font-size:13px;"></div>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; color:#5b667a; margin-bottom:6px;">Block/Period</label>
+              <div id="hourScheduleWrap" style="border:1px solid #e5e7ef; border-radius:10px; overflow:hidden; min-height:60px; display:flex; align-items:center; justify-content:center; color:#64748b;">
+                Pick a date to load the schedule…
+              </div>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; color:#5b667a; margin-bottom:6px;">Description (optional)</label>
+              <input type="text" id="hourDescription" placeholder="e.g., Helped with calculus homework" style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; background:#fff; outline:none;" />
+            </div>
+          </div>
+          <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+            <button id="cancelHourBtn" class="ghost">Cancel</button>
+            <button id="submitHourBtn" class="primary">Add Hour</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -515,7 +568,7 @@
 
       // --- Sessions renderer (uses same banner layout for consistency) ---
       const renderSession = (s, opts = {}) => {
-        const { showCancel = false, currentUser = null } = opts;
+        const { showCancel = false, showComplete = false, currentUser = null } = opts;
         const wrap = document.createElement("div");
         wrap.className = "request-banner";
 
@@ -538,50 +591,77 @@
       `;
 
         wrap.appendChild(left);
-        if (showCancel) {
+        if (showCancel || showComplete) {
           const right = document.createElement("div");
           right.className = "right";
-          const cancelBtn = document.createElement("button");
-          cancelBtn.className = "ghost";
-          cancelBtn.textContent = "Cancel & Reopen";
-
-          cancelBtn.addEventListener("click", async () => {
-            cancelBtn.disabled = true;
-            try {
-              // Prefer original availability; fall back to normalized; last resort: chosen slot only
-              const availability = s.availability ?? (s.slot ? [s.slot] : []);
-
-              const reqData = {
-                name: s.name ?? null,
-                email: s.email ?? null,
-                grade: s.grade ?? null,
-                subject: s.subject ?? null,
-                class: s.class ?? null,
-                topic: s.topic ?? null,
-                location: s.location ?? null,
-                info: s.info ?? null,
-                availability,
-              };
-              // If we know the original requestId, restore into the same doc ID.
-              if (s.requestId) {
-                await setDoc(doc(db, "Requests", s.requestId), reqData);
-              } else {
-                await addDoc(collection(db, "Requests"), reqData);
+          
+          // Commented out manual completion - sessions now auto-complete after their date passes
+          /*
+          if (showComplete && s.status === "scheduled") {
+            const completeBtn = document.createElement("button");
+            completeBtn.className = "primary";
+            completeBtn.textContent = "Mark Completed";
+            completeBtn.addEventListener("click", async () => {
+              if (!confirm("Mark this session as completed? This will add 1 hour to your total.")) return;
+              completeBtn.disabled = true;
+              try {
+                await setDoc(doc(db, "Sessions", s.id), { status: "completed" }, { merge: true });
+                alert("Session marked as completed! An hour has been added to your total.");
+                window.location.reload();
+              } catch (err) {
+                console.error("Error marking session as completed:", err);
+                alert("Failed to mark session as completed. Please try again.");
+                completeBtn.disabled = false;
               }
+            });
+            right.appendChild(completeBtn);
+          }
+          */
+          
+          if (showCancel) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.className = "ghost";
+            cancelBtn.textContent = "Cancel & Reopen";
 
-              // Remove the session
-              await deleteDoc(doc(db, "Sessions", s.id));
+            cancelBtn.addEventListener("click", async () => {
+              cancelBtn.disabled = true;
+              try {
+                // Prefer original availability; fall back to normalized; last resort: chosen slot only
+                const availability = s.availability ?? (s.slot ? [s.slot] : []);
 
-              // Quick, reliable UI refresh (rebuilds Upcoming, Open, Completed)
-              window.location.reload();
-            } catch (err) {
-              console.error("Cancel & Reopen error:", err);
-              cancelBtn.disabled = false;
-              alert("Failed to cancel the session. Please try again.");
-            }
-          });
+                const reqData = {
+                  name: s.name ?? null,
+                  email: s.email ?? null,
+                  grade: s.grade ?? null,
+                  subject: s.subject ?? null,
+                  class: s.class ?? null,
+                  topic: s.topic ?? null,
+                  location: s.location ?? null,
+                  info: s.info ?? null,
+                  availability,
+                };
+                // If we know the original requestId, restore into the same doc ID.
+                if (s.requestId) {
+                  await setDoc(doc(db, "Requests", s.requestId), reqData);
+                } else {
+                  await addDoc(collection(db, "Requests"), reqData);
+                }
 
-          right.appendChild(cancelBtn);
+                // Remove the session
+                await deleteDoc(doc(db, "Sessions", s.id));
+
+                // Quick, reliable UI refresh (rebuilds Upcoming, Open, Completed)
+                window.location.reload();
+              } catch (err) {
+                console.error("Cancel & Reopen error:", err);
+                cancelBtn.disabled = false;
+                alert("Failed to cancel the session. Please try again.");
+              }
+            });
+
+            right.appendChild(cancelBtn);
+          }
+          
           wrap.appendChild(right);
         }
         return wrap;
@@ -791,6 +871,7 @@
           });
 
           await loadCompletedSessions(user);
+          await loadHours(user);
 
           sessionsLoadingEl.classList.add("hidden");
 
@@ -799,13 +880,13 @@
             none.id = "sessions-empty";
             none.textContent = "No upcoming sessions.";
             sessionsEl.appendChild(none);
-          } else {
-            upcoming.forEach((s) =>
-              sessionsEl.appendChild(
-                renderSession(s, { showCancel: true, currentUser: user })
-              )
-            );
-          }
+        } else {
+          upcoming.forEach((s) =>
+            sessionsEl.appendChild(
+              renderSession(s, { showCancel: true, showComplete: true, currentUser: user })
+            )
+          );
+        }
 
           // ========== OPEN REQUESTS ==========
           const snap = await getDocs(collection(db, "Requests"));
@@ -984,6 +1065,224 @@
           console.error(e);
         }
       });
+
+      // ========== HOURS MANAGEMENT ==========
+      const addHourBtn = document.getElementById("addHourBtn");
+      const addHourModal = document.getElementById("addHourModal");
+      const closeHourModal = document.getElementById("closeHourModal");
+      const cancelHourBtn = document.getElementById("cancelHourBtn");
+      const submitHourBtn = document.getElementById("submitHourBtn");
+      const hourDate = document.getElementById("hourDate");
+      const hourCalendarBtn = document.getElementById("hourCalendarBtn");
+      const hourCalendarLabel = document.getElementById("hourCalendarLabel");
+      const hourDayLabel = document.getElementById("hourDayLabel");
+      const hourScheduleWrap = document.getElementById("hourScheduleWrap");
+      const hourDescription = document.getElementById("hourDescription");
+      const hoursEl = document.getElementById("hours");
+      const hoursLoadingEl = document.getElementById("hours-loading");
+
+      let selectedHourCycleDay = "";
+      let selectedHourBlock = "";
+      let hourXmlCache = null;
+
+      async function fetchHourXml() {
+        if (hourXmlCache) return hourXmlCache;
+        const url = `https://www.hw.com/portals/0/reports/DailySchedulesUS.xml?t=${Math.random()}`;
+        const res = await fetch(url);
+        const text = await res.text();
+        const xml = new window.DOMParser().parseFromString(text, "text/xml");
+        hourXmlCache = xml;
+        return xml;
+      }
+
+      function toMMDDYYYY(iso) {
+        if (typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+          const [y, m, d] = iso.split("-");
+          return m + "/" + d + "/" + y;
+        }
+        const dt = new Date(iso);
+        const mm = String(dt.getMonth() + 1).padStart(2, "0");
+        const dd = String(dt.getDate()).padStart(2, "0");
+        const yyyy = dt.getFullYear();
+        return mm + "/" + dd + "/" + yyyy;
+      }
+
+      function twelveHr(hhmm) {
+        return hhmm.replace(":00 AM", " AM").replace(":00 PM", " PM");
+      }
+
+      function extractTime(raw) {
+        return raw.replace("1/1/1900 ", "");
+      }
+
+      function buildHourScheduleTable(day) {
+        const periods = Array.from(day.getElementsByTagName("Period"));
+        if (!periods.length) {
+          hourScheduleWrap.innerHTML = '<div style="text-align:center;padding:18px;color:#64748b">No schedule for this day.</div>';
+          return;
+        }
+        const table = document.createElement("table");
+        table.style.width = "100%";
+        table.style.borderCollapse = "collapse";
+        periods.forEach((p) => {
+          const code = p.getElementsByTagName("PeriodCode")[0].textContent.trim();
+          const start = twelveHr(extractTime(p.getElementsByTagName("StartTime")[0].textContent));
+          const end = twelveHr(extractTime(p.getElementsByTagName("EndTime")[0].textContent));
+          if (code in blocksCatalog) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td style="padding:10px 12px;border-bottom:1px solid #f0f2f7;font-weight:700;width:96px">${code}</td><td style="padding:10px 12px;border-bottom:1px solid #f0f2f7;font-size:14px;color:#334155">${start} – ${end}</td><td style="padding:10px 12px;border-bottom:1px solid #f0f2f7;text-align:right"><button class="btn" data-code="${code}" style="border:1px solid #cbd5e1;padding:6px 10px;border-radius:8px;background:#fff;cursor:pointer">Select</button></td>`;
+            table.appendChild(tr);
+          }
+        });
+        hourScheduleWrap.innerHTML = "";
+        hourScheduleWrap.appendChild(table);
+        hourScheduleWrap.querySelectorAll("button[data-code]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            selectedHourBlock = btn.getAttribute("data-code");
+            hourScheduleWrap.querySelectorAll("button[data-code]").forEach(b => {
+              b.textContent = "Select";
+              b.disabled = false;
+            });
+            btn.textContent = "✓ Selected";
+            btn.disabled = true;
+          });
+        });
+      }
+
+      hourCalendarBtn.addEventListener("click", () => {
+        if (typeof hourDate.showPicker === "function") {
+          hourDate.showPicker();
+        } else {
+          hourDate.focus();
+          hourDate.click();
+        }
+      });
+
+      hourDate.addEventListener("change", async () => {
+        if (!hourDate.value) return;
+        hourCalendarLabel.textContent = toMMDDYYYY(hourDate.value);
+        const xml = await fetchHourXml();
+        const target = toMMDDYYYY(hourDate.value);
+        const days = Array.from(xml.getElementsByTagName("CalendarDay"));
+        const match = days.find((d) => (d.getElementsByTagName("Date")[0]?.textContent || "").trim() === target);
+        if (!match) {
+          hourScheduleWrap.innerHTML = '<div style="text-align:center;padding:18px;color:#64748b">No school schedule found for this date.</div>';
+          hourDayLabel.textContent = "";
+          selectedHourCycleDay = "";
+          return;
+        }
+        selectedHourCycleDay = (match.getElementsByTagName("CycleDay")[0]?.textContent || "").trim();
+        hourDayLabel.textContent = selectedHourCycleDay ? `Day ${selectedHourCycleDay}` : "";
+        buildHourScheduleTable(match);
+      });
+
+      addHourBtn.addEventListener("click", () => {
+        addHourModal.style.display = "flex";
+        hourDate.value = "";
+        hourCalendarLabel.textContent = "Pick a date";
+        hourDayLabel.textContent = "";
+        hourDescription.value = "";
+        selectedHourCycleDay = "";
+        selectedHourBlock = "";
+        hourScheduleWrap.innerHTML = '<div style="text-align:center;padding:18px;color:#64748b">Pick a date to load the schedule…</div>';
+      });
+
+      closeHourModal.addEventListener("click", () => {
+        addHourModal.style.display = "none";
+      });
+
+      cancelHourBtn.addEventListener("click", () => {
+        addHourModal.style.display = "none";
+      });
+
+      addHourModal.addEventListener("click", (e) => {
+        if (e.target === addHourModal) addHourModal.style.display = "none";
+      });
+
+      submitHourBtn.addEventListener("click", async () => {
+        if (!hourDate.value) {
+          alert("Please select a date");
+          return;
+        }
+        if (!selectedHourBlock) {
+          alert("Please select a block");
+          return;
+        }
+        submitHourBtn.disabled = true;
+        submitHourBtn.textContent = "Adding...";
+        try {
+          const currentUser = auth.currentUser;
+          await addDoc(collection(db, "Hours"), {
+            tutorUid: currentUser.uid,
+            tutorName: currentUser.displayName || null,
+            tutorEmail: currentUser.email || null,
+            date: toMMDDYYYY(hourDate.value),
+            cycleDay: selectedHourCycleDay,
+            block: selectedHourBlock,
+            description: hourDescription.value.trim() || null,
+            type: "self_reported",
+            createdAt: new Date().toISOString(),
+          });
+          addHourModal.style.display = "none";
+          await loadHours(currentUser);
+          alert("Hour added successfully!");
+        } catch (err) {
+          console.error("Error adding hour:", err);
+          alert("Failed to add hour. Please try again.");
+        } finally {
+          submitHourBtn.disabled = false;
+          submitHourBtn.textContent = "Add Hour";
+        }
+      });
+
+      async function loadHours(currentUser) {
+        hoursLoadingEl.classList.remove("hidden");
+        hoursEl.innerHTML = "";
+        const qHours = query(collection(db, "Hours"), where("tutorUid", "==", currentUser.uid));
+        const hoursSnap = await getDocs(qHours);
+        const hours = [];
+        hoursSnap.forEach((d) => {
+          const h = d.data() || {};
+          hours.push({ id: d.id, ...h });
+        });
+        hours.sort((a, b) => {
+          const aDate = new Date(a.date || 0);
+          const bDate = new Date(b.date || 0);
+          if (bDate - aDate !== 0) return bDate - aDate;
+          return String(b.cycleDay).localeCompare(String(a.cycleDay));
+        });
+        hoursLoadingEl.classList.add("hidden");
+        if (hours.length === 0) {
+          hoursEl.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af">No hours recorded yet.</div>';
+          return;
+        }
+        
+        const totalHours = hours.length;
+        const summary = document.createElement("div");
+        summary.style.cssText = "background:#eff6ff;border:1px solid #dbeafe;border-radius:10px;padding:12px 16px;margin-bottom:12px;font-weight:600;color:#1e40af";
+        summary.textContent = `Total Hours: ${totalHours}`;
+        hoursEl.appendChild(summary);
+
+        hours.forEach((h) => {
+          const row = document.createElement("div");
+          row.className = "request-banner";
+          row.style.marginBottom = "8px";
+          const blockName = blocksCatalog[h.block] || h.block;
+          const typeLabel = h.type === "self_reported" ? "Self-Reported" : "Completed Session";
+          const typePill = h.type === "self_reported" ? 
+            '<span class="pill" style="background:#fef3c7;border-color:#fcd34d;color:#92400e">Self-Reported</span>' :
+            '<span class="pill" style="background:#d1fae5;border-color:#6ee7b7;color:#065f46">Auto-Tracked</span>';
+          row.innerHTML = `
+            <div class="req-col grow">
+              <div><strong>${h.date || "N/A"}</strong> • Day ${h.cycleDay || "?"} • ${blockName} ${typePill}</div>
+              ${h.subject ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">${h.subject}${h.class ? ` — ${h.class}` : ""}</div>` : ""}
+              ${h.description ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">${h.description}</div>` : ""}
+              ${h.studentName ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">Student: ${h.studentName}</div>` : ""}
+            </div>
+          `;
+          hoursEl.appendChild(row);
+        });
+      }
 
       // Sign out handler (available after app/auth init)
       if (signOutBtn) {

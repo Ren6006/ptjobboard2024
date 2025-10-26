@@ -97,11 +97,11 @@
     <div class="box" style="opacity:0;transition:opacity 0.3s">
       <h1>Sign in</h1>
       <p class="helper">
-        Use your school email ending with <strong>@hwemail.com</strong>.
+        Use your school email ending with <strong>@hwemail.com</strong> or <strong>@hw.com</strong>.
       </p>
       <form id="loginForm">
         <label for="email">Email</label>
-        <input id="email" type="email" placeholder="you@hwemail.com" required />
+        <input id="email" type="email" placeholder="you@hwemail.com or you@hw.com" required />
 
         <label for="password">Password</label>
         <input
@@ -192,8 +192,8 @@
           const password = document.getElementById("password").value;
           const errorBox = document.getElementById("error");
           errorBox.textContent = "";
-          if (!email.endsWith("@hwemail.com")) {
-            errorBox.textContent = "Please use your @hwemail.com email.";
+          if (!(email.endsWith("@hwemail.com") || email.endsWith("@hw.com"))) {
+            errorBox.textContent = "Please use your @hwemail.com or @hw.com email.";
             return;
           }
           try {

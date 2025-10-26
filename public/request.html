@@ -307,7 +307,7 @@
         <input type="text" placeholder="Name (First and Last)" id="name" />
         <input
           type="text"
-          placeholder="School Email (@hwemail.com)"
+          placeholder="School Email (@hwemail.com or @hw.com)"
           id="email"
         />
         <select id="grade">
@@ -729,8 +729,8 @@
           const info = document.getElementById("info").value.trim();
 
           const errors = [];
-          if (!email.endsWith("@hwemail.com"))
-            errors.push("Email must end with '@hwemail.com'.");
+          if (!(email.endsWith("@hwemail.com") || email.endsWith("@hw.com")))
+            errors.push("Email must end with '@hwemail.com' or '@hw.com'.");
           if (!grade) errors.push("Please select a grade.");
           if (!subject) errors.push("Please select a subject.");
           if (!classSelection) errors.push("Please select a class.");

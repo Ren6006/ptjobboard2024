@@ -86,7 +86,7 @@
     <div class="box">
       <h1>Create your student account</h1>
       <p class="helper">
-        Use your school email ending with <strong>@hwemail.com</strong>.
+        Use your school email ending with <strong>@hwemail.com</strong> or <strong>@hw.com</strong>.
       </p>
       <form id="signupForm">
         <label for="name">Full name</label>
@@ -94,7 +94,7 @@
 
         <label for="email">School email</label>
         <input id="email" type="email" placeholder="you@hwemail.com" required />
-        <div class="hint">We only allow signups from @hwemail.com</div>
+        <div class="hint">We only allow signups from @hwemail.com or @hw.com</div>
 
         <label for="password">Password</label>
         <input
@@ -145,8 +145,13 @@
         const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value;
 
-        if (!email.endsWith("@hwemail.com")) {
-          errorBox.textContent = "Please use your @hwemail.com email.";
+        if (
+          !(
+            email.endsWith("@hwemail.com") ||
+            email.endsWith("@hw.com")
+          )
+        ) {
+          errorBox.textContent = "Please use your @hwemail.com or @hw.com email.";
           return;
         }
         if (!name) {

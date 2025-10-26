@@ -22,41 +22,43 @@ service cloud.firestore {
       return isSignedIn() && (myRole() in ['Admin', 'Head', 'Developer']);
     }
 
-    function isHeadOrAdmin() {
-      return isSignedIn() && (myRole() in ['Admin', 'Head']);
-    }
-
     function isLeadForSubject(subject) {
       return isSignedIn() && (myRole() == subject + ' Lead');
     }
 
-    // Avoid recursive get() when reading own user doc
-    function isCurrentUserAdmin(uid) {
-      return isSignedIn() && (
-        (uid == request.auth.uid && (resource.data.role in ['Admin','Head','Developer'])) ||
-        (uid != request.auth.uid && (userDoc(request.auth.uid).data.role in ['Admin','Head','Developer']))
-      );
-    }
-
     // users documents
     match /users/{uid} {
-      allow read: if isSelf(uid) || isCurrentUserAdmin(uid);
+      // Users can read their own doc, admins can read all (but check resource exists to avoid errors)
+      allow read: if isSelf(uid) || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin','Head','Developer']
+      );
 
-      // Owners can update their profile basics only; classes and role are restricted
+      // Owners can create their own document
       allow create: if isSelf(uid);
-      allow update: if isSelf(uid)
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.classes == resource.data.classes;
+      
+      // Owners can update their profile basics only; classes and role are restricted
+      // Allow update if document exists and fields are preserved
+      allow update: if isSelf(uid) && (
+        // If document doesn't exist yet (resource is null), allow creating it
+        (resource == null) ||
+        // If document doesn't have role/classes yet, allow setting them
+        (!resource.data.keys().hasAll(['role', 'classes'])) ||
+        // Otherwise require they stay the same
+        (request.resource.data.role == resource.data.role &&
+         request.resource.data.classes == resource.data.classes)
+      );
 
       // Elevated can write (e.g., admins/tools)
-      allow write: if isHeadOrAdmin();
+      allow write: if isAdminTier();
     }
 
     // Tutor class approval requests
     match /ClassRequests/{requestId} {
       allow read: if isSignedIn() && (
         resource.data.uid == request.auth.uid ||
-        isHeadOrAdmin() ||
+        isAdminTier() ||
         isLeadForSubject(resource.data.subject)
       );
 
@@ -64,14 +66,14 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid;
 
-      // Status moderation by head/admin or subject lead for that subject
+      // Status moderation by admin tier or subject lead for that subject
       allow update: if isSignedIn() && (
-        isHeadOrAdmin() ||
+        isAdminTier() ||
         isLeadForSubject(resource.data.subject)
       );
 
       // Prevent deletes by non-admins
-      allow delete: if isHeadOrAdmin();
+      allow delete: if isAdminTier();
     }
 
     // Student Requests and Sessions (baseline: authenticated read, guarded writes)
@@ -89,6 +91,17 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update: if isSignedIn();
       allow delete: if isSignedIn();
+    }
+
+    // Hours tracking
+    match /Hours/{hourId} {
+      allow read: if isSignedIn();
+      // Users can create hours for themselves; admins can create/edit/delete all
+      allow create: if isSignedIn() && request.resource.data.tutorUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (
+        resource.data.tutorUid == request.auth.uid ||
+        isAdminTier()
+      );
     }
 
     // Fallback block nothing else
