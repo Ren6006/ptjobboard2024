@@ -39,15 +39,25 @@ const blocksCatalog = {
 // ---- Gmail Auth ----
 async function getGmailClient() {
   const { OAuth2 } = google.auth;
+  const clientId = GMAIL_CLIENT_ID.value() || process.env.GMAIL_CLIENT_ID || "";
+  const clientSecret = GMAIL_CLIENT_SECRET.value() || process.env.GMAIL_CLIENT_SECRET || "";
+  const refreshToken = GMAIL_REFRESH_TOKEN.value() || process.env.GMAIL_REFRESH_TOKEN || "";
+  
+  console.log("OAuth Config:", {
+    clientIdLength: clientId.length,
+    clientSecretLength: clientSecret.length,
+    refreshTokenLength: refreshToken.length,
+    clientIdPrefix: clientId.substring(0, 20)
+  });
+  
   const oAuth2Client = new OAuth2(
-    GMAIL_CLIENT_ID.value() || process.env.GMAIL_CLIENT_ID || "",
-    GMAIL_CLIENT_SECRET.value() || process.env.GMAIL_CLIENT_SECRET || "",
+    clientId,
+    clientSecret,
     "https://developers.google.com/oauthplayground" // use your real redirect URI
   );
 
   oAuth2Client.setCredentials({
-    refresh_token:
-      GMAIL_REFRESH_TOKEN.value() || process.env.GMAIL_REFRESH_TOKEN || "",
+    refresh_token: refreshToken,
   });
 
   return google.gmail({ version: "v1", auth: oAuth2Client });
@@ -114,7 +124,7 @@ Your tutoring session has been confirmed.
 Thank you,
 HW Peer Tutoring`;
 
-    const from = `"HW Peer Tutoring" <uspeertutoring@hw.com>`; // MUST be the authed Gmail user or an approved alias
+    const from = `"HW Peer Tutoring" <uspeertutoring@gmail.com>`;
 
     for (const to of recipients) {
       try {
@@ -199,13 +209,56 @@ export const onClassRequestCreated = onDocumentCreated(
           const toList = [request.userEmail, "uspeertutoring@hw.com"].filter(Boolean);
           const subject = `Class Request Approved: ${className}`;
           const text = buildApprovalEmail({ userName: request.userName, subjectName, className });
-          const from = `"HW Peer Tutoring" <uspeertutoring@hw.com>`;
+          const from = `"HW Peer Tutoring" <uspeertutoring@gmail.com>`;
           for (const to of toList) {
             const raw = makeEmail({ from, to, subject, text });
             await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
           }
         } catch (err) {
           console.error("Email send failed for auto-approval", err?.response?.data || err);
+        }
+      } else {
+        // Not auto-approved - send notification to subject lead and admin
+        try {
+          const gmail = await getGmailClient();
+          const subject = `New Class Request Pending: ${className} (${subjectName})`;
+          const text = `Hello,
+
+A new class tutoring request is pending approval:
+
+👤 Tutor: ${request.userName || request.userEmail || "Unknown"}
+📧 Email: ${request.userEmail || "N/A"}
+📚 Subject: ${subjectName}
+📖 Class: ${className}
+🕒 Requested: ${request.requestedAt || new Date().toISOString()}
+
+Please review and approve/reject this request in the Lead Console on the board page.
+
+Thank you,
+HW Peer Tutoring`;
+
+          const from = `"HW Peer Tutoring" <uspeertutoring@gmail.com>`;
+          
+          // Send to admin - always notify them
+          const toList = ["uspeertutoring@hw.com"];
+          
+          // Try to find the subject lead email and add them
+          const usersSnap = await db.collection("users").where("role", "==", `${subjectName} Lead`).get();
+          if (!usersSnap.empty) {
+            usersSnap.forEach(doc => {
+              const leadEmail = doc.data()?.email;
+              if (leadEmail) toList.push(leadEmail);
+            });
+          }
+          
+          // Send notification emails
+          for (const to of toList) {
+            const raw = makeEmail({ from, to, subject, text });
+            await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+            console.log("Class request notification sent to", to);
+          }
+        } catch (err) {
+          console.error("Email send failed for class request notification", err?.response?.data || err);
         }
       }
     } catch (err) {
@@ -244,7 +297,7 @@ export const onClassRequestApproved = onDocumentUpdated(
         const toList = [curr.userEmail, "uspeertutoring@hw.com"].filter(Boolean);
         const subject = `Class Request Approved: ${className}`;
         const text = buildApprovalEmail({ userName: curr.userName, subjectName, className });
-        const from = `"HW Peer Tutoring" <uspeertutoring@hw.com>`;
+        const from = `"HW Peer Tutoring" <uspeertutoring@gmail.com>`;
         for (const to of toList) {
           const raw = makeEmail({ from, to, subject, text });
           await gmail.users.messages.send({ userId: "me", requestBody: { raw } });

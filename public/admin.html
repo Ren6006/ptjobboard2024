@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Console</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
     <script src="firebase-config.js"></script>
     <style>
@@ -141,48 +142,203 @@
            const approvalsList = document.getElementById('approvalsList');
            document.getElementById('refreshApprovals').addEventListener('click', renderApprovals);
 
-           async function renderApprovals() {
-             approvalsList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
-             const snap = await getDocs(collection(db, 'ClassRequests'));
-             const items = [];
-             snap.forEach(d => { const r = d.data() || {}; items.push({ id: d.id, ...r }); });
-             
-             let filtered = items;
-             const subFilter = filterSubject.value.toLowerCase().trim();
-             const statFilter = filterStatus.value;
-             if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter));
-             if (statFilter) filtered = filtered.filter(r => r.status === statFilter);
-             
-             filtered.sort((a,b)=> String(a.status).localeCompare(String(b.status)) || String(a.subject).localeCompare(String(b.subject)));
-             approvalsList.innerHTML = '';
-             if (filtered.length === 0) {
-               approvalsList.innerHTML = '<div class="empty">No class requests found.</div>';
-               return;
-             }
-             filtered.forEach((r) => {
-               const row = document.createElement('div');
-               row.className = 'item';
-               const statusClass = r.status === 'pending' ? 'pending' : r.status === 'approved' ? 'approved' : 'rejected';
-               row.innerHTML = `
-                 <div class="grow">
-                   <div><strong>${r.userName || r.userEmail || 'Tutor'}</strong> • ${r.userEmail || ''}</div>
-                   <div style="margin-top:4px">${r.subject} — ${r.class} <span class="pill ${statusClass}">${r.status}</span></div>
-                   <div style="font-size:12px;color:#6b7280;margin-top:4px">Requested: ${fmtDate(r.requestedAt)}</div>
-                 </div>
-               `;
-               if (r.status === 'pending') {
-                 const actions = document.createElement('div');
-                 actions.className = 'right';
-                 const approve = document.createElement('button'); approve.textContent = 'Approve'; approve.className = 'btn primary';
-                 const reject = document.createElement('button'); reject.textContent = 'Reject'; reject.className = 'btn';
-                 approve.addEventListener('click', async () => { approve.disabled = true; reject.disabled = true; await setDoc(doc(db, 'ClassRequests', r.id), { status: 'approved', decidedAt: new Date().toISOString(), decidedByUid: user.uid, decidedByName: user.displayName || user.email, decidedByRole: role }, { merge: true }); renderApprovals(); });
-                 reject.addEventListener('click', async () => { approve.disabled = true; reject.disabled = true; await setDoc(doc(db, 'ClassRequests', r.id), { status: 'rejected', decidedAt: new Date().toISOString(), decidedByUid: user.uid, decidedByName: user.displayName || user.email, decidedByRole: role }, { merge: true }); renderApprovals(); });
-                 actions.appendChild(approve); actions.appendChild(reject);
-                 row.appendChild(actions);
-               }
-               approvalsList.appendChild(row);
-             });
-           }
+          async function renderApprovals() {
+            approvalsList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+            const snap = await getDocs(collection(db, 'ClassRequests'));
+            const items = [];
+            snap.forEach(d => { const r = d.data() || {}; items.push({ id: d.id, ...r }); });
+            
+            let filtered = items;
+            const subFilter = filterSubject.value.toLowerCase().trim();
+            const statFilter = filterStatus.value;
+            if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter));
+            if (statFilter) filtered = filtered.filter(r => r.status === statFilter);
+            
+            // Group by user
+            const byUser = {};
+            filtered.forEach(r => {
+              const key = r.userEmail || 'unknown';
+              if (!byUser[key]) {
+                byUser[key] = {
+                  name: r.userName || r.userEmail || 'Tutor',
+                  email: r.userEmail || '',
+                  requests: []
+                };
+              }
+              byUser[key].requests.push(r);
+            });
+            
+            // Sort users by name
+            const userList = Object.values(byUser).sort((a,b) => a.name.localeCompare(b.name));
+            
+            approvalsList.innerHTML = '';
+            if (userList.length === 0) {
+              approvalsList.innerHTML = '<div class="empty">No class requests found.</div>';
+              return;
+            }
+            
+            userList.forEach((userData, idx) => {
+              const userContainer = document.createElement('div');
+              userContainer.style.marginBottom = '12px';
+              
+              // User header (clickable)
+              const userHeader = document.createElement('div');
+              userHeader.className = 'item';
+              userHeader.style.cursor = 'pointer';
+              
+              // Track counts with object so they can be updated
+              const counts = {
+                pending: userData.requests.filter(r => r.status === 'pending').length,
+                approved: userData.requests.filter(r => r.status === 'approved').length,
+                rejected: userData.requests.filter(r => r.status === 'rejected').length
+              };
+              
+              userHeader.innerHTML = `
+                <div class="grow">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:14px" id="arrow-${idx}">●</span>
+                    <strong>${userData.name}</strong> • ${userData.email}
+                  </div>
+                  <div style="margin-top:4px;font-size:13px;color:#6b7280">
+                    ${userData.requests.length} class${userData.requests.length !== 1 ? 'es' : ''} 
+                    ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
+                    ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
+                    ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
+                  </div>
+                </div>
+              `;
+              
+              // Classes list (hidden by default)
+              const classList = document.createElement('div');
+              classList.id = `classes-${idx}`;
+              classList.style.display = 'none';
+              classList.style.marginLeft = '32px';
+              classList.style.marginTop = '8px';
+              
+              // Sort classes: pending first, then by subject
+              userData.requests.sort((a,b) => {
+                const statusOrder = { pending: 0, approved: 1, rejected: 2 };
+                const aOrder = statusOrder[a.status] ?? 3;
+                const bOrder = statusOrder[b.status] ?? 3;
+                if (aOrder !== bOrder) return aOrder - bOrder;
+                return String(a.subject).localeCompare(String(b.subject));
+              });
+              
+              userData.requests.forEach(r => {
+                const classRow = document.createElement('div');
+                classRow.className = 'item';
+                classRow.style.marginBottom = '6px';
+                const statusClass = r.status === 'pending' ? 'pending' : r.status === 'approved' ? 'approved' : 'rejected';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'grow';
+                contentDiv.innerHTML = `
+                  <div>${r.subject} — ${r.class} <span class="pill ${statusClass}" id="status-${r.id}">${r.status}</span></div>
+                  <div style="font-size:12px;color:#6b7280;margin-top:4px">Requested: ${fmtDate(r.requestedAt)}</div>
+                `;
+                classRow.appendChild(contentDiv);
+                
+                if (r.status === 'pending') {
+                  const actions = document.createElement('div');
+                  actions.className = 'right';
+                  actions.id = `actions-${r.id}`;
+                  const approve = document.createElement('button'); 
+                  approve.textContent = 'Approve'; 
+                  approve.className = 'btn primary';
+                  const reject = document.createElement('button'); 
+                  reject.textContent = 'Reject'; 
+                  reject.className = 'btn';
+                  
+                  approve.addEventListener('click', async (e) => { 
+                    e.stopPropagation();
+                    approve.disabled = true; 
+                    reject.disabled = true; 
+                    await setDoc(doc(db, 'ClassRequests', r.id), { 
+                      status: 'approved', 
+                      decidedAt: new Date().toISOString(), 
+                      decidedByUid: user.uid, 
+                      decidedByName: user.displayName || user.email, 
+                      decidedByRole: role 
+                    }, { merge: true });
+                    
+                    // Update UI in place
+                    const statusPill = document.getElementById(`status-${r.id}`);
+                    if (statusPill) {
+                      statusPill.textContent = 'approved';
+                      statusPill.className = 'pill approved';
+                    }
+                    actions.remove();
+                    
+                    // Update counts
+                    counts.pending--;
+                    counts.approved++;
+                    
+                    // Update counts in header
+                    const headerCounts = userHeader.querySelector('.grow > div:nth-child(2)');
+                    const totalClasses = userData.requests.length;
+                    headerCounts.innerHTML = `
+                      ${totalClasses} class${totalClasses !== 1 ? 'es' : ''} 
+                      ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
+                      ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
+                      ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
+                    `;
+                  });
+                  
+                  reject.addEventListener('click', async (e) => { 
+                    e.stopPropagation();
+                    approve.disabled = true; 
+                    reject.disabled = true; 
+                    await setDoc(doc(db, 'ClassRequests', r.id), { 
+                      status: 'rejected', 
+                      decidedAt: new Date().toISOString(), 
+                      decidedByUid: user.uid, 
+                      decidedByName: user.displayName || user.email, 
+                      decidedByRole: role 
+                    }, { merge: true });
+                    
+                    // Update UI in place
+                    const statusPill = document.getElementById(`status-${r.id}`);
+                    if (statusPill) {
+                      statusPill.textContent = 'rejected';
+                      statusPill.className = 'pill rejected';
+                    }
+                    actions.remove();
+                    
+                    // Update counts
+                    counts.pending--;
+                    counts.rejected++;
+                    
+                    // Update counts in header
+                    const headerCounts = userHeader.querySelector('.grow > div:nth-child(2)');
+                    const totalClasses = userData.requests.length;
+                    headerCounts.innerHTML = `
+                      ${totalClasses} class${totalClasses !== 1 ? 'es' : ''} 
+                      ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
+                      ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
+                      ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
+                    `;
+                  });
+                  
+                  actions.appendChild(approve); 
+                  actions.appendChild(reject);
+                  classRow.appendChild(actions);
+                }
+                
+                classList.appendChild(classRow);
+              });
+              
+              // Toggle expand/collapse
+              userHeader.addEventListener('click', () => {
+                const isOpen = classList.style.display !== 'none';
+                classList.style.display = isOpen ? 'none' : 'block';
+                document.getElementById(`arrow-${idx}`).textContent = isOpen ? '●' : '○';
+              });
+              
+              userContainer.appendChild(userHeader);
+              userContainer.appendChild(classList);
+              approvalsList.appendChild(userContainer);
+            });
+          }
            filterSubject.addEventListener('input', renderApprovals);
            filterStatus.addEventListener('change', renderApprovals);
            renderApprovals();
