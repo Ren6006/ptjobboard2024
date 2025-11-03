@@ -36,6 +36,8 @@
       .btn { padding:8px 12px; border:1px solid #e5e7eb; background:#fff; border-radius:6px; cursor:pointer; font-weight:500; }
       .btn.primary { background:#1a57d6; color:#fff; border-color:#1a57d6; }
       .btn.primary:hover { background:#1547ad; }
+      .btn.secondary { background:#6b7280; color:#fff; border-color:#6b7280; }
+      .btn.secondary:hover { background:#4b5563; }
       .btn.danger { background:#ef4444; color:#fff; border-color:#ef4444; }
       .btn.danger:hover { background:#dc2626; }
       .btn:disabled { opacity:0.5; cursor:not-allowed; }
@@ -71,6 +73,7 @@
         <button class="tab" data-tab="sessions">Sessions</button>
         <button class="tab" data-tab="hours">Hours</button>
         <button class="tab" data-tab="users">Users & Roles</button>
+        <button class="tab" data-tab="calendar">Calendar Data</button>
         <button class="tab" data-tab="analytics">Analytics</button>
       </div>
       <div id="approvals" class="panel"></div>
@@ -78,13 +81,14 @@
       <div id="sessions" class="panel" style="display:none"></div>
       <div id="hours" class="panel" style="display:none"></div>
       <div id="users" class="panel" style="display:none"></div>
+      <div id="calendar" class="panel" style="display:none"></div>
       <div id="analytics" class="panel" style="display:none"></div>
     </div>
 
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
       import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-      import { getFirestore, collection, getDocs, setDoc, doc, getDoc, query, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+      import { getFirestore, collection, getDocs, setDoc, doc, getDoc, query, where, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
        const app = initializeApp(window.__FIREBASE_CONFIG__);
       const auth = getAuth(app);
@@ -93,7 +97,7 @@
 
       const who = document.getElementById('who');
       const tabs = document.querySelectorAll('.tab');
-       const panels = { approvals: document.getElementById('approvals'), requests: document.getElementById('requests'), sessions: document.getElementById('sessions'), hours: document.getElementById('hours'), users: document.getElementById('users'), analytics: document.getElementById('analytics') };
+       const panels = { approvals: document.getElementById('approvals'), requests: document.getElementById('requests'), sessions: document.getElementById('sessions'), hours: document.getElementById('hours'), users: document.getElementById('users'), calendar: document.getElementById('calendar'), analytics: document.getElementById('analytics') };
        const shell = document.querySelector('.shell');
        const loadingBanner = document.getElementById('loadingBanner');
       
@@ -805,7 +809,211 @@
            renderUsers();
          }
 
-         // ========== TAB 5: ANALYTICS ==========
+         // ========== TAB 5: CALENDAR DATA ==========
+         async function loadCalendar() {
+           const container = panels.calendar;
+           container.innerHTML = `
+             <h2>Cycle Calendar Management</h2>
+             <p style="color:#6b7280;margin-bottom:16px">Import cycle day schedule from the school's calendar feeds to preserve historical data in Firestore.</p>
+             <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+               <button id="importXmlBtn" class="btn primary">Import from XML Feed</button>
+               <button id="testIcsBtn" class="btn secondary">Test ICS Feed</button>
+               <button id="refreshCalendarBtn" class="btn secondary">Refresh View</button>
+             </div>
+             <div id="calendarStatus" style="padding:12px;border-radius:8px;margin-bottom:16px;display:none"></div>
+             <div id="calendarData"></div>
+           `;
+
+           const importBtn = document.getElementById('importXmlBtn');
+           const testIcsBtn = document.getElementById('testIcsBtn');
+           const refreshBtn = document.getElementById('refreshCalendarBtn');
+           const statusDiv = document.getElementById('calendarStatus');
+           const dataDiv = document.getElementById('calendarData');
+
+           async function refreshCalendarView() {
+             try {
+               dataDiv.innerHTML = '<p style="text-align:center;padding:24px;color:#6b7280">Loading...</p>';
+               const snapshot = await getDocs(collection(db, 'cycleDays'));
+               const days = [];
+               snapshot.forEach(d => {
+                 days.push({ id: d.id, ...d.data() });
+               });
+               
+               days.sort((a, b) => a.id.localeCompare(b.id));
+               
+               if (days.length === 0) {
+                 dataDiv.innerHTML = '<p style="text-align:center;padding:24px;color:#6b7280">No cycle days in database. Click "Import All Days from XML" to import current data.</p>';
+                 return;
+               }
+
+               // Show date range
+               const firstDate = days[0]?.id || 'N/A';
+               const lastDate = days[days.length - 1]?.id || 'N/A';
+
+               let html = `<p style="color:#6b7280;margin-bottom:8px">Total: <strong>${days.length} days</strong> (from ${firstDate} to ${lastDate})</p><table><thead><tr><th>Date</th><th>Day</th><th>Summary</th><th>Periods</th><th>Last Updated</th></tr></thead><tbody>`;
+               days.forEach(d => {
+                 const date = d.id;
+                 const day = d.day || '-';
+                 const summary = d.summary || '-';
+                 const periodCount = (d.periods || []).length;
+                 const updated = d.updatedAt ? fmtDate(d.updatedAt.toDate ? d.updatedAt.toDate() : d.updatedAt) : '-';
+                 html += `<tr><td>${date}</td><td>${day}</td><td>${summary}</td><td>${periodCount} periods</td><td>${updated}</td></tr>`;
+               });
+               html += '</tbody></table>';
+               dataDiv.innerHTML = html;
+             } catch (err) {
+               console.error(err);
+               dataDiv.innerHTML = '<p style="color:#ef4444">Error loading calendar data.</p>';
+             }
+           }
+
+           importBtn.addEventListener('click', async () => {
+             if (!confirm('This will fetch all days from the school XML and save them to Firestore. Continue?')) return;
+             
+             importBtn.disabled = true;
+             importBtn.textContent = 'Importing...';
+             statusDiv.style.display = 'block';
+             statusDiv.style.background = '#eff6ff';
+             statusDiv.style.border = '1px solid #dbeafe';
+             statusDiv.style.color = '#1e40af';
+             statusDiv.textContent = 'Fetching XML...';
+
+             try {
+               const url = 'https://www.hw.com/portals/0/reports/DailySchedulesUS.xml?t=' + Math.random();
+               const res = await fetch(url);
+               const text = await res.text();
+               const xml = new window.DOMParser().parseFromString(text, 'text/xml');
+               
+               const calendarDays = Array.from(xml.getElementsByTagName('CalendarDay'));
+               statusDiv.textContent = `Found ${calendarDays.length} days in XML. Saving to Firestore...`;
+
+               let saved = 0;
+               let skipped = 0;
+               
+               for (const dayNode of calendarDays) {
+                 const dateStr = dayNode.getElementsByTagName('Date')[0]?.textContent.trim();
+                 if (!dateStr) continue;
+                 
+                 // Convert MM/DD/YYYY to YYYY-MM-DD for document ID
+                 const [mm, dd, yyyy] = dateStr.split('/');
+                 const docId = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+                 
+                 const cycleDay = dayNode.getElementsByTagName('CycleDay')[0]?.textContent.trim() || null;
+                 const summary = dayNode.getElementsByTagName('SchoolDayDescription')[0]?.textContent.trim() || null;
+                 
+                 const periods = [];
+                 const periodNodes = Array.from(dayNode.getElementsByTagName('Period'));
+                 periodNodes.forEach(p => {
+                   const code = p.getElementsByTagName('PeriodCode')[0]?.textContent.trim() || '';
+                   const start = p.getElementsByTagName('StartTime')[0]?.textContent.trim() || '';
+                   const end = p.getElementsByTagName('EndTime')[0]?.textContent.trim() || '';
+                   if (code) periods.push({ code, start, end });
+                 });
+                 
+                 try {
+                   await setDoc(doc(db, 'cycleDays', docId), {
+                     day: cycleDay,
+                     summary: summary,
+                     periods: periods,
+                     updatedAt: serverTimestamp()
+                   });
+                   saved++;
+                 } catch (err) {
+                   console.error(`Failed to save ${docId}:`, err);
+                   skipped++;
+                 }
+               }
+
+               statusDiv.style.background = '#d1fae5';
+               statusDiv.style.border = '1px solid #6ee7b7';
+               statusDiv.style.color = '#065f46';
+               statusDiv.textContent = `Import complete! Saved ${saved} days. ${skipped > 0 ? 'Skipped ' + skipped + ' due to errors.' : ''}`;
+               
+               await refreshCalendarView();
+             } catch (err) {
+               console.error(err);
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.textContent = 'Import failed: ' + err.message;
+             } finally {
+               importBtn.disabled = false;
+               importBtn.textContent = 'Import All Days from XML';
+             }
+           });
+
+           testIcsBtn.addEventListener('click', async () => {
+             testIcsBtn.disabled = true;
+             testIcsBtn.textContent = 'Testing...';
+             statusDiv.style.display = 'block';
+             statusDiv.style.background = '#eff6ff';
+             statusDiv.style.border = '1px solid #dbeafe';
+             statusDiv.style.color = '#1e40af';
+             statusDiv.innerHTML = 'Testing potential ICS endpoints...<br>';
+
+             const possibleUrls = [
+               'https://www.hw.com/portals/0/reports/DailySchedulesUS.ics',
+               'https://www.hw.com/calendar/ics',
+               'https://www.hw.com/fs/elements/calendar.ics',
+               'https://calendar.hw.com/calendar.ics',
+               'https://www.hw.com/calendar.ics'
+             ];
+
+             let found = null;
+
+             for (const url of possibleUrls) {
+               try {
+                 statusDiv.innerHTML += `Trying ${url}...<br>`;
+                 const res = await fetch(url + '?t=' + Math.random());
+                 if (res.ok) {
+                   const text = await res.text();
+                   if (text.includes('BEGIN:VCALENDAR') || text.includes('BEGIN:VEVENT')) {
+                     found = { url, text };
+                     break;
+                   } else {
+                     statusDiv.innerHTML += `❌ Not an ICS file<br>`;
+                   }
+                 } else {
+                   statusDiv.innerHTML += `❌ ${res.status} ${res.statusText}<br>`;
+                 }
+               } catch (err) {
+                 statusDiv.innerHTML += `❌ Failed: ${err.message}<br>`;
+               }
+             }
+
+             if (found) {
+               statusDiv.style.background = '#d1fae5';
+               statusDiv.style.border = '1px solid #6ee7b7';
+               statusDiv.style.color = '#065f46';
+               
+               // Parse ICS to count events
+               const eventCount = (found.text.match(/BEGIN:VEVENT/g) || []).length;
+               
+               statusDiv.innerHTML += `<br><strong>✅ Found ICS feed at: ${found.url}</strong><br>`;
+               statusDiv.innerHTML += `Events found: ${eventCount}<br>`;
+               statusDiv.innerHTML += `<br><em>Note: You'll need to manually parse this ICS data. The XML import is currently the easiest option.</em>`;
+               
+               // Show a sample
+               const lines = found.text.split('\\n').slice(0, 20).join('\\n');
+               statusDiv.innerHTML += `<br><br><details><summary>Preview first 20 lines</summary><pre style="font-size:11px;overflow:auto">${lines.replace(/</g, '&lt;')}</pre></details>`;
+             } else {
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.innerHTML += `<br><strong>❌ No ICS feed found.</strong><br>Use the XML import instead.`;
+             }
+
+             testIcsBtn.disabled = false;
+             testIcsBtn.textContent = 'Test ICS Feed';
+           });
+
+           refreshBtn.addEventListener('click', refreshCalendarView);
+           
+           // Initial load
+           await refreshCalendarView();
+         }
+
+         // ========== TAB 6: ANALYTICS ==========
          async function loadAnalytics() {
            const container = panels.analytics;
            container.innerHTML = '<h2>Analytics & Reports</h2><div id="stats"></div><div style="margin-top:16px"><button id="exportCSV" class="btn primary">Export Sessions to CSV</button></div>';
@@ -862,22 +1070,24 @@
            });
          }
 
-         // Lazy-load other tabs
-         tabs.forEach(t => t.addEventListener('click', () => {
-           const tab = t.dataset.tab;
-           if (tab === 'requests' && panels.requests.innerHTML.includes('Coming soon')) loadRequests();
-           if (tab === 'sessions' && panels.sessions.innerHTML.includes('Coming soon')) loadSessions();
-           if (tab === 'hours' && panels.hours.innerHTML.includes('Coming soon')) loadHours();
-           if (tab === 'users' && panels.users.innerHTML.includes('Coming soon')) loadUsers();
-           if (tab === 'analytics' && panels.analytics.innerHTML.includes('Coming soon')) loadAnalytics();
-         }));
+        // Lazy-load other tabs
+        tabs.forEach(t => t.addEventListener('click', () => {
+          const tab = t.dataset.tab;
+          if (tab === 'requests' && panels.requests.innerHTML.includes('Coming soon')) loadRequests();
+          if (tab === 'sessions' && panels.sessions.innerHTML.includes('Coming soon')) loadSessions();
+          if (tab === 'hours' && panels.hours.innerHTML.includes('Coming soon')) loadHours();
+          if (tab === 'users' && panels.users.innerHTML.includes('Coming soon')) loadUsers();
+          if (tab === 'calendar' && panels.calendar.innerHTML.includes('Coming soon')) loadCalendar();
+          if (tab === 'analytics' && panels.analytics.innerHTML.includes('Coming soon')) loadAnalytics();
+        }));
 
-         // Stub other panels until clicked
-         panels.requests.innerHTML = 'Coming soon...';
-         panels.sessions.innerHTML = 'Coming soon...';
-         panels.hours.innerHTML = 'Coming soon...';
-         panels.users.innerHTML = 'Coming soon...';
-         panels.analytics.innerHTML = 'Coming soon...';
+        // Stub other panels until clicked
+        panels.requests.innerHTML = 'Coming soon...';
+        panels.sessions.innerHTML = 'Coming soon...';
+        panels.hours.innerHTML = 'Coming soon...';
+        panels.users.innerHTML = 'Coming soon...';
+        panels.calendar.innerHTML = 'Coming soon...';
+        panels.analytics.innerHTML = 'Coming soon...';
 
        } catch (e) {
          navigated = true;

@@ -78,9 +78,10 @@ service cloud.firestore {
 
     // Student Requests and Sessions (baseline: authenticated read, guarded writes)
     match /Requests/{docId} {
+      // Allow anyone (including unauthenticated) to create a new tutoring request.
+      // Keep reads and modifications restricted to signed-in users.
+      allow create: if true;
       allow read: if isSignedIn();
-      // Allow create/update/delete by any signed-in user (tutors finalize/cancel flows)
-      allow create: if isSignedIn();
       allow update: if isSignedIn();
       allow delete: if isSignedIn();
     }
@@ -102,6 +103,12 @@ service cloud.firestore {
         resource.data.tutorUid == request.auth.uid ||
         isAdminTier()
       );
+    }
+
+    // Cycle calendar days - read by all signed in, write by admins only
+    match /cycleDays/{dateId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminTier();
     }
 
     // Fallback block nothing else

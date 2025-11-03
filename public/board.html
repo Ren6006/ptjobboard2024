@@ -337,6 +337,7 @@
         setDoc,
         query,
         where,
+        serverTimestamp,
       } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
       const app = initializeApp(window.__FIREBASE_CONFIG__);
@@ -1107,6 +1108,67 @@
         return mm + "/" + dd + "/" + yyyy;
       }
 
+      // Hybrid fetch: Check Firestore first, then XML, and save to Firestore if from XML
+      async function fetchCycleDayData(dateYYYYMMDD) {
+        try {
+          // Try Firestore first
+          const docRef = doc(db, "cycleDays", dateYYYYMMDD);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            return {
+              cycleDay: data.day || "",
+              summary: data.summary || "",
+              periods: data.periods || []
+            };
+          }
+        } catch (err) {
+          console.warn("Firestore fetch failed, falling back to XML:", err);
+        }
+
+        // Fallback to XML
+        const xml = await fetchHourXml();
+        const targetMMDDYYYY = toMMDDYYYY(dateYYYYMMDD);
+        const days = Array.from(xml.getElementsByTagName("CalendarDay"));
+        const match = days.find((d) => 
+          (d.getElementsByTagName("Date")[0]?.textContent || "").trim() === targetMMDDYYYY
+        );
+
+        if (!match) {
+          return null; // No data found
+        }
+
+        const cycleDay = (match.getElementsByTagName("CycleDay")[0]?.textContent || "").trim();
+        const summary = (match.getElementsByTagName("SchoolDayDescription")[0]?.textContent || "").trim();
+        
+        // Extract periods
+        const periods = [];
+        const periodNodes = Array.from(match.getElementsByTagName("Period"));
+        periodNodes.forEach((p) => {
+          const code = p.getElementsByTagName("PeriodCode")[0]?.textContent.trim() || "";
+          const start = p.getElementsByTagName("StartTime")[0]?.textContent.trim() || "";
+          const end = p.getElementsByTagName("EndTime")[0]?.textContent.trim() || "";
+          if (code) {
+            periods.push({ code, start, end });
+          }
+        });
+
+        // Save to Firestore for future use
+        try {
+          await setDoc(doc(db, "cycleDays", dateYYYYMMDD), {
+            day: cycleDay || null,
+            summary: summary || null,
+            periods: periods,
+            updatedAt: serverTimestamp()
+          });
+        } catch (err) {
+          console.warn("Failed to save to Firestore:", err);
+        }
+
+        return { cycleDay, summary, periods, xmlNode: match };
+      }
+
       function twelveHr(hhmm) {
         return hhmm.replace(":00 AM", " AM").replace(":00 PM", " PM");
       }
@@ -1115,25 +1177,44 @@
         return raw.replace("1/1/1900 ", "");
       }
 
-      function buildHourScheduleTable(day) {
-        const periods = Array.from(day.getElementsByTagName("Period"));
+      function buildHourScheduleTable(dayDataOrNode) {
+        let periods = [];
+        
+        // Handle both new format (from Firestore) and old format (XML node)
+        if (dayDataOrNode.periods && Array.isArray(dayDataOrNode.periods)) {
+          // New format from Firestore
+          periods = dayDataOrNode.periods;
+        } else if (dayDataOrNode.getElementsByTagName) {
+          // Old XML node format
+          const periodNodes = Array.from(dayDataOrNode.getElementsByTagName("Period"));
+          periodNodes.forEach((p) => {
+            const code = p.getElementsByTagName("PeriodCode")[0]?.textContent.trim() || "";
+            const start = p.getElementsByTagName("StartTime")[0]?.textContent.trim() || "";
+            const end = p.getElementsByTagName("EndTime")[0]?.textContent.trim() || "";
+            if (code) periods.push({ code, start, end });
+          });
+        }
+        
         if (!periods.length) {
           hourScheduleWrap.innerHTML = '<div style="text-align:center;padding:18px;color:#64748b">No schedule for this day.</div>';
           return;
         }
+        
         const table = document.createElement("table");
         table.style.width = "100%";
         table.style.borderCollapse = "collapse";
         periods.forEach((p) => {
-          const code = p.getElementsByTagName("PeriodCode")[0].textContent.trim();
-          const start = twelveHr(extractTime(p.getElementsByTagName("StartTime")[0].textContent));
-          const end = twelveHr(extractTime(p.getElementsByTagName("EndTime")[0].textContent));
+          const code = p.code;
+          const start = twelveHr(extractTime(p.start));
+          const end = twelveHr(extractTime(p.end));
+          
           if (code in blocksCatalog) {
             const tr = document.createElement("tr");
             tr.innerHTML = `<td style="padding:10px 12px;border-bottom:1px solid #f0f2f7;font-weight:700;width:96px">${code}</td><td style="padding:10px 12px;border-bottom:1px solid #f0f2f7;font-size:14px;color:#334155">${start} – ${end}</td><td style="padding:10px 12px;border-bottom:1px solid #f0f2f7;text-align:right"><button class="btn" data-code="${code}" style="border:1px solid #cbd5e1;padding:6px 10px;border-radius:8px;background:#fff;cursor:pointer">Select</button></td>`;
             table.appendChild(tr);
           }
         });
+        
         hourScheduleWrap.innerHTML = "";
         hourScheduleWrap.appendChild(table);
         hourScheduleWrap.querySelectorAll("button[data-code]").forEach((btn) => {
@@ -1161,19 +1242,20 @@
       hourDate.addEventListener("change", async () => {
         if (!hourDate.value) return;
         hourCalendarLabel.textContent = toMMDDYYYY(hourDate.value);
-        const xml = await fetchHourXml();
-        const target = toMMDDYYYY(hourDate.value);
-        const days = Array.from(xml.getElementsByTagName("CalendarDay"));
-        const match = days.find((d) => (d.getElementsByTagName("Date")[0]?.textContent || "").trim() === target);
-        if (!match) {
+        
+        // Use hybrid fetch (Firestore first, then XML)
+        const data = await fetchCycleDayData(hourDate.value);
+        
+        if (!data) {
           hourScheduleWrap.innerHTML = '<div style="text-align:center;padding:18px;color:#64748b">No school schedule found for this date.</div>';
           hourDayLabel.textContent = "";
           selectedHourCycleDay = "";
           return;
         }
-        selectedHourCycleDay = (match.getElementsByTagName("CycleDay")[0]?.textContent || "").trim();
-        hourDayLabel.textContent = selectedHourCycleDay ? `Day ${selectedHourCycleDay}` : "";
-        buildHourScheduleTable(match);
+        
+        selectedHourCycleDay = data.cycleDay;
+        hourDayLabel.textContent = data.summary || (data.cycleDay ? `Day ${data.cycleDay}` : "");
+        buildHourScheduleTable(data);
       });
 
       addHourBtn.addEventListener("click", () => {
