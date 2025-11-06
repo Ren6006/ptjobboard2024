@@ -829,9 +829,11 @@
             syncHiddenField();
             e.target.reset();
           } catch (err) {
-            console.error(err);
+            console.error("Request submission error:", err);
+            console.error("Error code:", err.code);
+            console.error("Error message:", err.message);
             alert(
-              "An error occurred while submitting your request. Please try again."
+              "An error occurred while submitting your request: " + err.message + "\n\nPlease check the browser console for details and try again."
             );
           }
         });

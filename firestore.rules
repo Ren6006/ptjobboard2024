@@ -78,10 +78,10 @@ service cloud.firestore {
 
     // Student Requests and Sessions (baseline: authenticated read, guarded writes)
     match /Requests/{docId} {
-      // Allow anyone (including unauthenticated) to create a new tutoring request.
-      // Keep reads and modifications restricted to signed-in users.
-      allow create: if true;
       allow read: if isSignedIn();
+      // Allow anyone to create requests (students don't need accounts)
+      // But require auth for update/delete (only tutors should modify)
+      allow create: if true;
       allow update: if isSignedIn();
       allow delete: if isSignedIn();
     }

@@ -814,19 +814,21 @@
            const container = panels.calendar;
            container.innerHTML = `
              <h2>Cycle Calendar Management</h2>
-             <p style="color:#6b7280;margin-bottom:16px">Import cycle day schedule from the school's calendar feeds to preserve historical data in Firestore.</p>
+             <p style="color:#6b7280;margin-bottom:16px">Import cycle day schedule from the school's XML feed to preserve historical data in Firestore.</p>
              <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-               <button id="importXmlBtn" class="btn primary">Import from XML Feed</button>
-               <button id="testIcsBtn" class="btn secondary">Test ICS Feed</button>
+               <button id="importXmlBtn" class="btn primary">Import from XML</button>
+               <button id="importIcsBtn" class="btn primary">Import from ICS Feed</button>
                <button id="refreshCalendarBtn" class="btn secondary">Refresh View</button>
+               <button id="inspectXmlBtn" class="btn secondary">Inspect XML</button>
              </div>
              <div id="calendarStatus" style="padding:12px;border-radius:8px;margin-bottom:16px;display:none"></div>
              <div id="calendarData"></div>
            `;
 
            const importBtn = document.getElementById('importXmlBtn');
-           const testIcsBtn = document.getElementById('testIcsBtn');
+           const importIcsBtn = document.getElementById('importIcsBtn');
            const refreshBtn = document.getElementById('refreshCalendarBtn');
+           const inspectBtn = document.getElementById('inspectXmlBtn');
            const statusDiv = document.getElementById('calendarStatus');
            const dataDiv = document.getElementById('calendarData');
 
@@ -846,11 +848,7 @@
                  return;
                }
 
-               // Show date range
-               const firstDate = days[0]?.id || 'N/A';
-               const lastDate = days[days.length - 1]?.id || 'N/A';
-
-               let html = `<p style="color:#6b7280;margin-bottom:8px">Total: <strong>${days.length} days</strong> (from ${firstDate} to ${lastDate})</p><table><thead><tr><th>Date</th><th>Day</th><th>Summary</th><th>Periods</th><th>Last Updated</th></tr></thead><tbody>`;
+               let html = `<p style="color:#6b7280;margin-bottom:8px">Total: <strong>${days.length} days</strong></p><table><thead><tr><th>Date</th><th>Day</th><th>Summary</th><th>Periods</th><th>Last Updated</th></tr></thead><tbody>`;
                days.forEach(d => {
                  const date = d.id;
                  const day = d.day || '-';
@@ -889,6 +887,7 @@
 
                let saved = 0;
                let skipped = 0;
+               let totalPeriods = 0;
                
                for (const dayNode of calendarDays) {
                  const dateStr = dayNode.getElementsByTagName('Date')[0]?.textContent.trim();
@@ -901,13 +900,37 @@
                  const cycleDay = dayNode.getElementsByTagName('CycleDay')[0]?.textContent.trim() || null;
                  const summary = dayNode.getElementsByTagName('SchoolDayDescription')[0]?.textContent.trim() || null;
                  
+                 // Extract periods - check if they're children of the CalendarDay node
                  const periods = [];
-                 const periodNodes = Array.from(dayNode.getElementsByTagName('Period'));
+                 
+                 // First try: direct Period children
+                 let periodNodes = Array.from(dayNode.getElementsByTagName('Period'));
+                 
+                 // If no periods found, try looking in a Periods container
+                 if (periodNodes.length === 0) {
+                   const periodsContainer = dayNode.getElementsByTagName('Periods')[0];
+                   if (periodsContainer) {
+                     periodNodes = Array.from(periodsContainer.getElementsByTagName('Period'));
+                   }
+                 }
+                 
+                 // If still no periods, try childNodes approach
+                 if (periodNodes.length === 0 && dayNode.childNodes) {
+                   for (let child of dayNode.childNodes) {
+                     if (child.nodeName === 'Period') {
+                       periodNodes.push(child);
+                     }
+                   }
+                 }
+                 
                  periodNodes.forEach(p => {
                    const code = p.getElementsByTagName('PeriodCode')[0]?.textContent.trim() || '';
                    const start = p.getElementsByTagName('StartTime')[0]?.textContent.trim() || '';
                    const end = p.getElementsByTagName('EndTime')[0]?.textContent.trim() || '';
-                   if (code) periods.push({ code, start, end });
+                   if (code) {
+                     periods.push({ code, start, end });
+                     totalPeriods++;
+                   }
                  });
                  
                  try {
@@ -918,6 +941,11 @@
                      updatedAt: serverTimestamp()
                    });
                    saved++;
+                   
+                   // Log first few for debugging
+                   if (saved <= 3) {
+                     console.log(`${docId}: ${periods.length} periods`, periods);
+                   }
                  } catch (err) {
                    console.error(`Failed to save ${docId}:`, err);
                    skipped++;
@@ -927,7 +955,7 @@
                statusDiv.style.background = '#d1fae5';
                statusDiv.style.border = '1px solid #6ee7b7';
                statusDiv.style.color = '#065f46';
-               statusDiv.textContent = `Import complete! Saved ${saved} days. ${skipped > 0 ? 'Skipped ' + skipped + ' due to errors.' : ''}`;
+               statusDiv.textContent = `Import complete! Saved ${saved} days with ${totalPeriods} total periods. ${skipped > 0 ? 'Skipped ' + skipped + ' due to errors.' : ''} Check browser console for details.`;
                
                await refreshCalendarView();
              } catch (err) {
@@ -942,70 +970,237 @@
              }
            });
 
-           testIcsBtn.addEventListener('click', async () => {
-             testIcsBtn.disabled = true;
-             testIcsBtn.textContent = 'Testing...';
+           importIcsBtn.addEventListener('click', async () => {
+             if (!confirm('This will attempt to import calendar data from an ICS feed. This might include historical dates. Continue?')) return;
+             
+             importIcsBtn.disabled = true;
+             importIcsBtn.textContent = 'Importing...';
              statusDiv.style.display = 'block';
              statusDiv.style.background = '#eff6ff';
              statusDiv.style.border = '1px solid #dbeafe';
              statusDiv.style.color = '#1e40af';
-             statusDiv.innerHTML = 'Testing potential ICS endpoints...<br>';
+             statusDiv.innerHTML = 'Searching for ICS feeds...';
 
              const possibleUrls = [
+               'https://www.hw.com/calendar/cycledaysUS.ics',  // The actual ICS feed
                'https://www.hw.com/portals/0/reports/DailySchedulesUS.ics',
-               'https://www.hw.com/calendar/ics',
+               'https://www.hw.com/calendar.ics',
                'https://www.hw.com/fs/elements/calendar.ics',
                'https://calendar.hw.com/calendar.ics',
-               'https://www.hw.com/calendar.ics'
+               'https://www.hw.com/portals/0/calendar.ics'
              ];
 
              let found = null;
 
              for (const url of possibleUrls) {
                try {
-                 statusDiv.innerHTML += `Trying ${url}...<br>`;
+                 statusDiv.innerHTML += `<br>Trying: ${url}...`;
                  const res = await fetch(url + '?t=' + Math.random());
                  if (res.ok) {
                    const text = await res.text();
                    if (text.includes('BEGIN:VCALENDAR') || text.includes('BEGIN:VEVENT')) {
                      found = { url, text };
+                     statusDiv.innerHTML += ' ✓ Found!';
                      break;
                    } else {
-                     statusDiv.innerHTML += `❌ Not an ICS file<br>`;
+                     statusDiv.innerHTML += ' ❌ Not ICS';
                    }
                  } else {
-                   statusDiv.innerHTML += `❌ ${res.status} ${res.statusText}<br>`;
+                   statusDiv.innerHTML += ` ❌ ${res.status}`;
                  }
                } catch (err) {
-                 statusDiv.innerHTML += `❌ Failed: ${err.message}<br>`;
+                 statusDiv.innerHTML += ` ❌ ${err.message}`;
                }
              }
 
-             if (found) {
-               statusDiv.style.background = '#d1fae5';
-               statusDiv.style.border = '1px solid #6ee7b7';
-               statusDiv.style.color = '#065f46';
-               
-               // Parse ICS to count events
-               const eventCount = (found.text.match(/BEGIN:VEVENT/g) || []).length;
-               
-               statusDiv.innerHTML += `<br><strong>✅ Found ICS feed at: ${found.url}</strong><br>`;
-               statusDiv.innerHTML += `Events found: ${eventCount}<br>`;
-               statusDiv.innerHTML += `<br><em>Note: You'll need to manually parse this ICS data. The XML import is currently the easiest option.</em>`;
-               
-               // Show a sample
-               const lines = found.text.split('\\n').slice(0, 20).join('\\n');
-               statusDiv.innerHTML += `<br><br><details><summary>Preview first 20 lines</summary><pre style="font-size:11px;overflow:auto">${lines.replace(/</g, '&lt;')}</pre></details>`;
-             } else {
+             if (!found) {
                statusDiv.style.background = '#fee2e2';
                statusDiv.style.border = '1px solid #fecaca';
                statusDiv.style.color = '#991b1b';
-               statusDiv.innerHTML += `<br><strong>❌ No ICS feed found.</strong><br>Use the XML import instead.`;
+               statusDiv.innerHTML += '<br><br><strong>❌ No ICS feed found.</strong><br>The school does not appear to publish an ICS calendar feed. Historical dates are not available via this method.';
+               importIcsBtn.disabled = false;
+               importIcsBtn.textContent = 'Import from ICS Feed';
+               return;
              }
 
-             testIcsBtn.disabled = false;
-             testIcsBtn.textContent = 'Test ICS Feed';
+             // Parse ICS and import
+             statusDiv.innerHTML += '<br><br>Parsing ICS data...';
+             
+             try {
+               const events = parseICS(found.text);
+               console.log('ICS Parser found events:', events.slice(0, 5)); // Log first 5 for debugging
+               statusDiv.innerHTML += `<br>Found ${events.length} events. Importing to Firestore...`;
+               
+               let saved = 0;
+               let skipped = 0;
+               let updated = 0;
+               
+               for (const evt of events) {
+                 if (!evt.date || !evt.summary) {
+                   skipped++;
+                   continue;
+                 }
+                 
+                 // Extract cycle day from summary (e.g., "US Day 3")
+                 const dayMatch = evt.summary.match(/Day\s+(\d+)/i);
+                 const cycleDay = dayMatch ? dayMatch[1] : null;
+                 
+                 if (!cycleDay) {
+                   console.log('No cycle day found in:', evt.summary);
+                   skipped++;
+                   continue;
+                 }
+                 
+                 try {
+                   // Check if already exists with periods
+                   const docRef = doc(db, 'cycleDays', evt.date);
+                   const existing = await getDoc(docRef);
+                   
+                   if (existing.exists() && existing.data().periods && existing.data().periods.length > 0) {
+                     skipped++; // Already has data, don't overwrite
+                     continue;
+                   }
+                   
+                   // Save or update (merge to preserve existing periods if any)
+                   await setDoc(docRef, {
+                     day: cycleDay,
+                     summary: evt.summary,
+                     periods: [], // ICS doesn't have period details
+                     updatedAt: serverTimestamp()
+                   }, { merge: true });
+                   
+                   if (existing.exists()) {
+                     updated++;
+                   } else {
+                     saved++;
+                   }
+                 } catch (err) {
+                   console.error(`Failed to save ${evt.date}:`, err);
+                   skipped++;
+                 }
+               }
+               
+               statusDiv.style.background = '#d1fae5';
+               statusDiv.style.border = '1px solid #6ee7b7';
+               statusDiv.style.color = '#065f46';
+               statusDiv.innerHTML += `<br><br><strong>✓ Import complete!</strong><br>New: ${saved} days<br>Updated: ${updated} days<br>Skipped: ${skipped} (already had periods or missing info)<br><br><em>Note: ICS feeds contain cycle day info but not detailed period schedules. Historical dates will show the cycle day but won't have period-by-period schedules.</em>`;
+               
+               await refreshCalendarView();
+             } catch (err) {
+               console.error(err);
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.innerHTML += `<br><br>❌ Failed to parse ICS: ${err.message}`;
+             } finally {
+               importIcsBtn.disabled = false;
+               importIcsBtn.textContent = 'Import from ICS Feed';
+             }
            });
+
+           function parseICS(icsText) {
+             const events = [];
+             // Unfold lines (ICS files can have line continuations starting with space/tab)
+             const unfolded = icsText.replace(/\r?\n[ \t]/g, '');
+             const lines = unfolded.split(/\r?\n/);
+             let currentEvent = null;
+             
+             for (let i = 0; i < lines.length; i++) {
+               const line = lines[i].trim();
+               
+               if (line === 'BEGIN:VEVENT') {
+                 currentEvent = {};
+               } else if (line === 'END:VEVENT' && currentEvent) {
+                 if (currentEvent.dtstart && currentEvent.summary) {
+                   // Convert DTSTART to YYYY-MM-DD format
+                   // Handle both DTSTART:20250826 and DTSTART;VALUE=DATE:20250826
+                   const dateMatch = currentEvent.dtstart.match(/(\d{4})(\d{2})(\d{2})/);
+                   if (dateMatch) {
+                     currentEvent.date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+                     events.push(currentEvent);
+                   }
+                 }
+                 currentEvent = null;
+               } else if (currentEvent) {
+                 if (line.startsWith('DTSTART')) {
+                   const parts = line.split(':');
+                   const value = parts[parts.length - 1]; // Get last part after all colons
+                   currentEvent.dtstart = value;
+                 } else if (line.startsWith('SUMMARY:')) {
+                   currentEvent.summary = line.substring(8).trim();
+                 } else if (line.startsWith('DESCRIPTION:')) {
+                   currentEvent.description = line.substring(12).trim();
+                 }
+               }
+             }
+             
+             return events;
+           }
+
+          inspectBtn.addEventListener('click', async () => {
+             inspectBtn.disabled = true;
+             inspectBtn.textContent = 'Fetching...';
+             statusDiv.style.display = 'block';
+             statusDiv.style.background = '#eff6ff';
+             statusDiv.style.border = '1px solid #dbeafe';
+             statusDiv.style.color = '#1e40af';
+             statusDiv.innerHTML = 'Fetching XML...';
+
+             try {
+               const url = 'https://www.hw.com/portals/0/reports/DailySchedulesUS.xml?t=' + Math.random();
+               const res = await fetch(url);
+               const text = await res.text();
+               const xml = new window.DOMParser().parseFromString(text, 'text/xml');
+               
+               const calendarDays = Array.from(xml.getElementsByTagName('CalendarDay'));
+               const firstDay = calendarDays[0];
+               
+               if (firstDay) {
+                 const dateStr = firstDay.getElementsByTagName('Date')[0]?.textContent.trim() || 'N/A';
+                 const cycleDay = firstDay.getElementsByTagName('CycleDay')[0]?.textContent.trim() || 'N/A';
+                 const summary = firstDay.getElementsByTagName('SchoolDayDescription')[0]?.textContent.trim() || 'N/A';
+                 
+                 // Count periods in first day
+                 const periodNodes = Array.from(firstDay.getElementsByTagName('Period'));
+                 
+                 statusDiv.style.background = '#f0fdf4';
+                 statusDiv.style.border = '1px solid #86efac';
+                 statusDiv.style.color = '#166534';
+                 statusDiv.innerHTML = `
+                   <strong>XML Structure Inspection:</strong><br>
+                   Total CalendarDay elements: ${calendarDays.length}<br>
+                   First day date: ${dateStr}<br>
+                   First day cycle: ${cycleDay}<br>
+                   First day summary: ${summary}<br>
+                   First day periods found: ${periodNodes.length}<br><br>
+                   <details>
+                     <summary>First CalendarDay XML (click to expand)</summary>
+                     <pre style="font-size:11px;overflow:auto;max-height:400px;background:#fff;padding:8px;border:1px solid #ddd;border-radius:4px">${escapeHtml(new XMLSerializer().serializeToString(firstDay))}</pre>
+                   </details>
+                 `;
+               } else {
+                 statusDiv.style.background = '#fee2e2';
+                 statusDiv.style.border = '1px solid #fecaca';
+                 statusDiv.style.color = '#991b1b';
+                 statusDiv.textContent = 'No CalendarDay elements found in XML!';
+               }
+             } catch (err) {
+               console.error(err);
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.textContent = 'Failed to fetch XML: ' + err.message;
+             } finally {
+               inspectBtn.disabled = false;
+               inspectBtn.textContent = 'Inspect XML Structure';
+             }
+           });
+
+           function escapeHtml(text) {
+             const div = document.createElement('div');
+             div.textContent = text;
+             return div.innerHTML;
+           }
 
            refreshBtn.addEventListener('click', refreshCalendarView);
            
@@ -1070,24 +1265,24 @@
            });
          }
 
-        // Lazy-load other tabs
-        tabs.forEach(t => t.addEventListener('click', () => {
-          const tab = t.dataset.tab;
-          if (tab === 'requests' && panels.requests.innerHTML.includes('Coming soon')) loadRequests();
-          if (tab === 'sessions' && panels.sessions.innerHTML.includes('Coming soon')) loadSessions();
-          if (tab === 'hours' && panels.hours.innerHTML.includes('Coming soon')) loadHours();
-          if (tab === 'users' && panels.users.innerHTML.includes('Coming soon')) loadUsers();
+         // Lazy-load other tabs
+         tabs.forEach(t => t.addEventListener('click', () => {
+           const tab = t.dataset.tab;
+           if (tab === 'requests' && panels.requests.innerHTML.includes('Coming soon')) loadRequests();
+           if (tab === 'sessions' && panels.sessions.innerHTML.includes('Coming soon')) loadSessions();
+           if (tab === 'hours' && panels.hours.innerHTML.includes('Coming soon')) loadHours();
+           if (tab === 'users' && panels.users.innerHTML.includes('Coming soon')) loadUsers();
           if (tab === 'calendar' && panels.calendar.innerHTML.includes('Coming soon')) loadCalendar();
-          if (tab === 'analytics' && panels.analytics.innerHTML.includes('Coming soon')) loadAnalytics();
-        }));
+           if (tab === 'analytics' && panels.analytics.innerHTML.includes('Coming soon')) loadAnalytics();
+         }));
 
-        // Stub other panels until clicked
-        panels.requests.innerHTML = 'Coming soon...';
-        panels.sessions.innerHTML = 'Coming soon...';
-        panels.hours.innerHTML = 'Coming soon...';
-        panels.users.innerHTML = 'Coming soon...';
+         // Stub other panels until clicked
+         panels.requests.innerHTML = 'Coming soon...';
+         panels.sessions.innerHTML = 'Coming soon...';
+         panels.hours.innerHTML = 'Coming soon...';
+         panels.users.innerHTML = 'Coming soon...';
         panels.calendar.innerHTML = 'Coming soon...';
-        panels.analytics.innerHTML = 'Coming soon...';
+         panels.analytics.innerHTML = 'Coming soon...';
 
        } catch (e) {
          navigated = true;
