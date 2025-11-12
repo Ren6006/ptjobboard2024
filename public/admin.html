@@ -818,6 +818,7 @@
              <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
                <button id="importXmlBtn" class="btn primary">Import from XML</button>
                <button id="importIcsBtn" class="btn primary">Import from ICS Feed</button>
+               <button id="backfillBtn" class="btn primary">Backfill Missing Periods</button>
                <button id="refreshCalendarBtn" class="btn secondary">Refresh View</button>
                <button id="inspectXmlBtn" class="btn secondary">Inspect XML</button>
              </div>
@@ -827,6 +828,7 @@
 
            const importBtn = document.getElementById('importXmlBtn');
            const importIcsBtn = document.getElementById('importIcsBtn');
+           const backfillBtn = document.getElementById('backfillBtn');
            const refreshBtn = document.getElementById('refreshCalendarBtn');
            const inspectBtn = document.getElementById('inspectXmlBtn');
            const statusDiv = document.getElementById('calendarStatus');
@@ -967,6 +969,125 @@
              } finally {
                importBtn.disabled = false;
                importBtn.textContent = 'Import All Days from XML';
+             }
+           });
+
+           // One-time backfill script: populate periods for any day missing them, based on cycle day (1-6)
+           backfillBtn.addEventListener('click', async () => {
+             if (!confirm('Backfill all cycleDays that have no periods using the standard templates for Day 1-6? This will update existing docs.')) return;
+ 
+             backfillBtn.disabled = true;
+             backfillBtn.textContent = 'Backfilling...';
+             statusDiv.style.display = 'block';
+             statusDiv.style.background = '#eff6ff';
+             statusDiv.style.border = '1px solid #dbeafe';
+             statusDiv.style.color = '#1e40af';
+             statusDiv.textContent = 'Scanning cycleDays...';
+ 
+             // Canonical period templates (times match the XML; date component is 1/1/1900)
+             const t = {
+               '1': [
+                 { code: '1',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M11',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:25:00 AM' },
+                 { code: '2',  start: '1/1/1900 10:30:00 AM', end: '1/1/1900 11:45:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:45:00 AM', end: '1/1/1900 12:45:00 PM' },
+                 { code: '3',  start: '1/1/1900 12:45:00 PM', end: '1/1/1900 2:00:00 PM' },
+                 { code: 'B1', start: '1/1/1900 2:00:00 PM',  end: '1/1/1900 2:15:00 PM' },
+                 { code: 'DS', start: '1/1/1900 2:15:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '2': [
+                 { code: '4',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M10',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 9:55:00 AM' },
+                 { code: '5',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: '6',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
+                 { code: '7',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '3': [
+                 { code: 'FC', start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:50:00 AM' },
+                 { code: '2',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: '3',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
+                 { code: '1',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '4': [
+                 { code: '5',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M12',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 9:55:00 AM' },
+                 { code: '6',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: '7',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
+                 { code: '4',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '5': [
+                 { code: '3',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'CT', start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:25:00 AM' },
+                 { code: '1',  start: '1/1/1900 10:30:00 AM', end: '1/1/1900 11:45:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:45:00 AM', end: '1/1/1900 12:45:00 PM' },
+                 { code: '2',  start: '1/1/1900 12:45:00 PM', end: '1/1/1900 2:00:00 PM' },
+                 { code: 'B1', start: '1/1/1900 2:00:00 PM',  end: '1/1/1900 2:15:00 PM' },
+                 { code: 'DS', start: '1/1/1900 2:15:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '6': [
+                 { code: '6',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'OH', start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:00:00 AM' },
+                 { code: '7',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: '4',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
+                 { code: '5',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+             };
+ 
+             try {
+               const snap = await getDocs(collection(db, 'cycleDays'));
+               let updated = 0;
+               let skipped = 0;
+ 
+               for (const d of snap.docs) {
+                 const id = d.id;
+                 const data = d.data() || {};
+                 const existing = Array.isArray(data.periods) ? data.periods : [];
+                 const dayVal = (data.day == null) ? null : String(data.day).trim();
+                 if (!dayVal || !t[dayVal]) {
+                   skipped++;
+                   continue;
+                 }
+                 if (existing.length > 0) {
+                   skipped++;
+                   continue;
+                 }
+ 
+                 await setDoc(doc(db, 'cycleDays', id), {
+                   periods: t[dayVal],
+                   summary: data.summary || `US Day ${dayVal}`,
+                   updatedAt: serverTimestamp(),
+                 }, { merge: true });
+                 updated++;
+               }
+ 
+               statusDiv.style.background = '#d1fae5';
+               statusDiv.style.border = '1px solid #6ee7b7';
+               statusDiv.style.color = '#065f46';
+               statusDiv.textContent = `Backfill complete. Updated ${updated} days. Skipped ${skipped} (already had periods or missing/unknown cycle day).`;
+               await refreshCalendarView();
+             } catch (err) {
+               console.error(err);
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.textContent = 'Backfill failed: ' + err.message;
+             } finally {
+               backfillBtn.disabled = false;
+               backfillBtn.textContent = 'Backfill Missing Periods';
              }
            });
 
