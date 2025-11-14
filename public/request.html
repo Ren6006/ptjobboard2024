@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Submit a Tutoring Request</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
     <style>
       * {
@@ -306,7 +307,7 @@
         <input type="text" placeholder="Name (First and Last)" id="name" />
         <input
           type="text"
-          placeholder="School Email (@hwemail.com)"
+          placeholder="School Email (@hwemail.com or @hw.com)"
           id="email"
         />
         <select id="grade">
@@ -425,7 +426,9 @@
         appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
         measurementId: "G-PF9F78SKZV",
       };
-      firebase.initializeApp(firebaseConfig);
+      if (!firebase.apps || !firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
       const db = firebase.firestore();
 
       // ===== Class options (unchanged) =====
@@ -594,6 +597,7 @@
       // ===== Schedule loader (Upper School by default) =====
       const CAMPUS = "US";
       let xmlCache = null;
+      
       async function fetchXml() {
         if (xmlCache) return xmlCache;
         const url = `https://www.hw.com/portals/0/reports/DailySchedules${CAMPUS}.xml?t=${Math.random()}`;
@@ -603,6 +607,7 @@
         xmlCache = xml;
         return xml;
       }
+
       function toMMDDYYYY(iso) {
         // If it's the YYYY-MM-DD from <input type="date">, parse it directly to avoid TZ shifts
         if (typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
@@ -617,6 +622,67 @@
         return mm + "/" + dd + "/" + yyyy;
       }
 
+      // Hybrid fetch: Check Firestore first, then XML, and save to Firestore if from XML
+      async function fetchCycleDayData(dateYYYYMMDD) {
+        try {
+          // Try Firestore first
+          const docRef = db.collection("cycleDays").doc(dateYYYYMMDD);
+          const docSnap = await docRef.get();
+          
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            return {
+              cycleDay: data.day || "",
+              summary: data.summary || "",
+              periods: data.periods || []
+            };
+          }
+        } catch (err) {
+          console.warn("Firestore fetch failed, falling back to XML:", err);
+        }
+
+        // Fallback to XML
+        const xml = await fetchXml();
+        const targetMMDDYYYY = toMMDDYYYY(dateYYYYMMDD);
+        const days = Array.from(xml.getElementsByTagName("CalendarDay"));
+        const match = days.find((d) => 
+          (d.getElementsByTagName("Date")[0]?.textContent || "").trim() === targetMMDDYYYY
+        );
+
+        if (!match) {
+          return null; // No data found
+        }
+
+        const cycleDay = (match.getElementsByTagName("CycleDay")[0]?.textContent || "").trim();
+        const summary = (match.getElementsByTagName("SchoolDayDescription")[0]?.textContent || "").trim();
+        
+        // Extract periods
+        const periods = [];
+        const periodNodes = Array.from(match.getElementsByTagName("Period"));
+        periodNodes.forEach((p) => {
+          const code = p.getElementsByTagName("PeriodCode")[0]?.textContent.trim() || "";
+          const start = p.getElementsByTagName("StartTime")[0]?.textContent.trim() || "";
+          const end = p.getElementsByTagName("EndTime")[0]?.textContent.trim() || "";
+          if (code) {
+            periods.push({ code, start, end });
+          }
+        });
+
+        // Save to Firestore for future use
+        try {
+          await db.collection("cycleDays").doc(dateYYYYMMDD).set({
+            day: cycleDay || null,
+            summary: summary || null,
+            periods: periods,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        } catch (err) {
+          console.warn("Failed to save to Firestore:", err);
+        }
+
+        return { cycleDay, summary, periods, xmlNode: match };
+      }
+
       function twelveHr(hhmm) {
         // expects "H:MM AM/PM" or "HH:MM AM/PM" as in source after trimming prefix
         return hhmm.replace(":00 AM", " AM").replace(":00 PM", " PM");
@@ -625,30 +691,43 @@
         return raw.replace("1/1/1900 ", "");
       }
 
-      function buildScheduleTable(day) {
-        const periods = Array.from(day.getElementsByTagName("Period"));
+      function buildScheduleTable(dayDataOrNode) {
+        let periods = [];
+        
+        // Handle both new format (from Firestore) and old format (XML node)
+        if (dayDataOrNode.periods && Array.isArray(dayDataOrNode.periods)) {
+          // New format from Firestore
+          periods = dayDataOrNode.periods;
+        } else if (dayDataOrNode.getElementsByTagName) {
+          // Old XML node format
+          const periodNodes = Array.from(dayDataOrNode.getElementsByTagName("Period"));
+          periodNodes.forEach((p) => {
+            const code = p.getElementsByTagName("PeriodCode")[0]?.textContent.trim() || "";
+            const start = p.getElementsByTagName("StartTime")[0]?.textContent.trim() || "";
+            const end = p.getElementsByTagName("EndTime")[0]?.textContent.trim() || "";
+            if (code) periods.push({ code, start, end });
+          });
+        }
+        
         if (!periods.length) {
           scheduleWrap.innerHTML =
             '<div class="empty">No schedule for this day.</div>';
           return;
         }
+        
         const table = document.createElement("table");
         periods.forEach((p) => {
-          const code = p
-            .getElementsByTagName("PeriodCode")[0]
-            .textContent.trim();
-          const start = twelveHr(
-            extractTime(p.getElementsByTagName("StartTime")[0].textContent)
-          );
-          const end = twelveHr(
-            extractTime(p.getElementsByTagName("EndTime")[0].textContent)
-          );
+          const code = p.code;
+          const start = twelveHr(extractTime(p.start));
+          const end = twelveHr(extractTime(p.end));
+          
           if (code in blocksCatalog) {
             const tr = document.createElement("tr");
             tr.innerHTML = `<td class="code">${code}</td><td class="time">${start} – ${end}</td><td class="pick"><button class="btn" data-code="${code}">Add</button></td>`;
             table.appendChild(tr);
           }
         });
+        
         scheduleWrap.innerHTML = "";
         scheduleWrap.appendChild(table);
         scheduleWrap.querySelectorAll("button[data-code]").forEach((btn) => {
@@ -674,29 +753,21 @@
         }
         calendarBtnLabel.textContent = toMMDDYYYY(slotDate.value);
 
-        const xml = await fetchXml();
-        const target = toMMDDYYYY(slotDate.value);
-        const days = Array.from(xml.getElementsByTagName("CalendarDay"));
-        const match = days.find(
-          (d) =>
-            (d.getElementsByTagName("Date")[0]?.textContent || "").trim() ===
-            target
-        );
+        // Use hybrid fetch (Firestore first, then XML)
+        const data = await fetchCycleDayData(slotDate.value);
 
-        if (!match) {
+        if (!data) {
           scheduleWrap.innerHTML =
             '<div class="empty">No school schedule found for this date.</div>';
           dayLabel.textContent = "";
-          selectedCycleDay = ""; // clear if no match
+          selectedCycleDay = "";
           return;
         }
 
-        // Try several likely tag names; fall back to description if needed
-        selectedCycleDay = (
-          match.getElementsByTagName("CycleDay")[0]?.textContent || ""
-        ).trim();
+        selectedCycleDay = data.cycleDay;
+        dayLabel.textContent = data.summary || (data.cycleDay ? `Day ${data.cycleDay}` : "");
 
-        buildScheduleTable(match);
+        buildScheduleTable(data);
       });
 
       calendarBtn.addEventListener("click", () => {
@@ -726,8 +797,8 @@
           const info = document.getElementById("info").value.trim();
 
           const errors = [];
-          if (!email.endsWith("@hwemail.com"))
-            errors.push("Email must end with '@hwemail.com'.");
+          if (!(email.endsWith("@hwemail.com") || email.endsWith("@hw.com")))
+            errors.push("Email must end with '@hwemail.com' or '@hw.com'.");
           if (!grade) errors.push("Please select a grade.");
           if (!subject) errors.push("Please select a subject.");
           if (!classSelection) errors.push("Please select a class.");
@@ -758,9 +829,11 @@
             syncHiddenField();
             e.target.reset();
           } catch (err) {
-            console.error(err);
+            console.error("Request submission error:", err);
+            console.error("Error code:", err.code);
+            console.error("Error message:", err.message);
             alert(
-              "An error occurred while submitting your request. Please try again."
+              "An error occurred while submitting your request: " + err.message + "\n\nPlease check the browser console for details and try again."
             );
           }
         });

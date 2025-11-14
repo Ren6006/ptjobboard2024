@@ -2,18 +2,119 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function myRole() {
+      return userDoc(request.auth.uid).data.role;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdminTier() {
+      return isSignedIn() && (myRole() in ['Admin', 'Head', 'Developer']);
+    }
+
+    function isLeadForSubject(subject) {
+      return isSignedIn() && (myRole() == subject + ' Lead');
+    }
+
+    // users documents
+    match /users/{uid} {
+      // Users can read their own doc, admins can read all (but check resource exists to avoid errors)
+      allow read: if isSelf(uid) || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin','Head','Developer']
+      );
+
+      // Owners can create their own document
+      allow create: if isSelf(uid);
+      
+      // Owners can update their profile basics only; classes and role are restricted
+      // Allow update if document exists and fields are preserved
+      allow update: if isSelf(uid) && (
+        // If document doesn't exist yet (resource is null), allow creating it
+        (resource == null) ||
+        // If document doesn't have role/classes yet, allow setting them
+        (!resource.data.keys().hasAll(['role', 'classes'])) ||
+        // Otherwise require they stay the same
+        (request.resource.data.role == resource.data.role &&
+         request.resource.data.classes == resource.data.classes)
+      );
+
+      // Elevated can write (e.g., admins/tools)
+      allow write: if isAdminTier();
+    }
+
+    // Tutor class approval requests
+    match /ClassRequests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.uid == request.auth.uid ||
+        isAdminTier() ||
+        isLeadForSubject(resource.data.subject)
+      );
+
+      // Create by owner only; uid is immutable after create
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+
+      // Status moderation by admin tier or subject lead for that subject
+      allow update: if isSignedIn() && (
+        isAdminTier() ||
+        isLeadForSubject(resource.data.subject)
+      );
+
+      // Prevent deletes by non-admins
+      allow delete: if isAdminTier();
+    }
+
+    // Student Requests and Sessions (baseline: authenticated read, guarded writes)
+    match /Requests/{docId} {
+      allow read: if isSignedIn();
+      // Allow anyone to create requests (students don't need accounts)
+      // But require auth for update/delete (only tutors should modify)
+      allow create: if true;
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
+    match /Sessions/{sessionId} {
+      allow read: if isSignedIn();
+      // Allow create/update/delete by signed-in (tutor finalize/cancel flows)
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
+    // Hours tracking
+    match /Hours/{hourId} {
+      allow read: if isSignedIn();
+      // Users can create hours for themselves; admins can create/edit/delete all
+      allow create: if isSignedIn() && request.resource.data.tutorUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (
+        resource.data.tutorUid == request.auth.uid ||
+        isAdminTier()
+      );
+    }
+
+    // Cycle calendar days - read by all signed in, write by admins only
+    match /cycleDays/{dateId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminTier();
+    }
+
+    // Fallback block nothing else
     match /{document=**} {
-      allow read, write;
+      allow read: if false;
+      allow write: if false;
     }
   }
 }

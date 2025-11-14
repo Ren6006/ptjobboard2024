@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sign up to get tutored</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
+    <script src="firebase-config.js"></script>
     <style>
       body {
         display: flex;
@@ -84,7 +86,7 @@
     <div class="box">
       <h1>Create your student account</h1>
       <p class="helper">
-        Use your school email ending with <strong>@hwemail.com</strong>.
+        Use your school email ending with <strong>@hwemail.com</strong> or <strong>@hw.com</strong>.
       </p>
       <form id="signupForm">
         <label for="name">Full name</label>
@@ -92,7 +94,7 @@
 
         <label for="email">School email</label>
         <input id="email" type="email" placeholder="you@hwemail.com" required />
-        <div class="hint">We only allow signups from @hwemail.com</div>
+        <div class="hint">We only allow signups from @hwemail.com or @hw.com</div>
 
         <label for="password">Password</label>
         <input
@@ -116,18 +118,10 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
     <script src="common-auth.js"></script>
     <script>
-      const firebaseConfig = {
-        apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
-        authDomain: "ptjobboard2024.firebaseapp.com",
-        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-        projectId: "ptjobboard2024",
-        storageBucket: "ptjobboard2024.firebasestorage.app",
-        messagingSenderId: "401143229772",
-        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-        measurementId: "G-PF9F78SKZV",
-      };
-
-      firebase.initializeApp(firebaseConfig);
+      const firebaseConfig = window.__FIREBASE_CONFIG__;
+      if (!firebase.apps || !firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
       const auth = firebase.auth();
       const db = firebase.firestore();
 
@@ -151,8 +145,13 @@
         const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value;
 
-        if (!email.endsWith("@hwemail.com")) {
-          errorBox.textContent = "Please use your @hwemail.com email.";
+        if (
+          !(
+            email.endsWith("@hwemail.com") ||
+            email.endsWith("@hw.com")
+          )
+        ) {
+          errorBox.textContent = "Please use your @hwemail.com or @hw.com email.";
           return;
         }
         if (!name) {

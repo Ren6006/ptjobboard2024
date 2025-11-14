@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sign In</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
+    <script src="firebase-config.js"></script>
     <style>
       body {
         display: flex;
@@ -62,6 +64,10 @@
         color: #b00020;
         margin-top: 10px;
       }
+      .info {
+        color: #0a7a33;
+        margin-top: 10px;
+      }
       .link {
         margin-top: 14px;
         text-align: center;
@@ -71,17 +77,35 @@
         text-decoration: none;
         font-weight: bold;
       }
+      #authLoading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f4f4f9;
+        z-index: 100;
+      }
+      #authLoading.hide {
+        display: none;
+      }
     </style>
   </head>
   <body>
-    <div class="box">
+    <div id="authLoading">
+      <div style="text-align:center;color:#666">
+        <div style="font-size:18px;margin-bottom:8px">Checking sign-in status...</div>
+        <div style="font-size:14px;color:#999">Please wait</div>
+      </div>
+    </div>
+    <div class="box" style="opacity:0;transition:opacity 0.3s">
       <h1>Sign in</h1>
       <p class="helper">
-        Use your school email ending with <strong>@hwemail.com</strong>.
+        Use your school email ending with <strong>@hwemail.com</strong> or <strong>@hw.com</strong>.
       </p>
       <form id="loginForm">
         <label for="email">Email</label>
-        <input id="email" type="email" placeholder="you@hwemail.com" required />
+        <input id="email" type="email" placeholder="you@hwemail.com or you@hw.com" required />
 
         <label for="password">Password</label>
         <input
@@ -93,6 +117,10 @@
 
         <button type="submit">Sign in</button>
         <div id="error" class="error"></div>
+        <div id="info" class="info"></div>
+        <div class="link" style="margin-top:8px">
+          <a href="#" id="forgotPasswordLink">Forgot your password?</a>
+        </div>
       </form>
       <div class="link">No account? <a href="signup.html">Sign up</a></div>
     </div>
@@ -100,34 +128,69 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
-    <script src="common-auth.js"></script>
     <script>
-      const firebaseConfig = {
-        apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
-        authDomain: "ptjobboard2024.firebaseapp.com",
-        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-        projectId: "ptjobboard2024",
-        storageBucket: "ptjobboard2024.firebasestorage.app",
-        messagingSenderId: "401143229772",
-        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-        measurementId: "G-PF9F78SKZV",
-      };
-      if (!firebase.apps.length) {
+      const firebaseConfig = window.__FIREBASE_CONFIG__;
+      if (!firebase.apps || !firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
       }
       const auth = firebase.auth();
       const db = firebase.firestore();
       auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
 
-      // If already signed in, send to request form
-      auth.onAuthStateChanged((user) => {
+      // If already signed in, only redirect when an explicit next is provided
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get("next");
+      
+      // Global flag to prevent double redirects from both onAuthStateChanged and form submit
+      let redirectHandled = false;
+      
+      auth.onAuthStateChanged(async (user) => {
+        console.log('AUTH STATE CHANGE - user:', user ? user.email : 'none', 'next:', next, 'redirectHandled:', redirectHandled);
+        if (redirectHandled) {
+          console.log('Redirect already handled, skipping');
+          return;
+        }
         if (user) {
-          window.location.href = "board.html";
+          // User is signed in, will redirect - keep form hidden
+          // If no next param, default to board for tutors
+          const destination = next || 'board.html';
+          console.log('User signed in, destination:', destination);
+          redirectHandled = true;
+          
+          // If next is admin, check role first
+          if (destination === 'admin.html') {
+            console.log('Next is admin.html, checking role...');
+            try {
+              const doc = await db.collection('users').doc(user.uid).get();
+              const data = doc.exists ? doc.data() : null;
+              const role = data ? (data.role || null) : null;
+              console.log('Role check on signin:', role, 'for user:', user.email);
+              if (role === 'Admin' || role === 'Head' || role === 'Developer') {
+                console.log('Access granted - redirecting to admin');
+                window.location.href = destination;
+              } else {
+                console.log('Access denied - redirecting to board');
+                const url = new URL('board.html', window.location.href);
+                url.searchParams.set('err', 'admin_denied');
+                window.location.href = url.toString();
+              }
+            } catch (e) {
+              console.error('Role check error:', e);
+              window.location.href = 'board.html';
+            }
+          } else {
+            console.log('Not admin destination, redirecting to:', destination);
+            window.location.href = destination;
+          }
+        } else {
+          console.log('No user signed in, staying on signin page');
+          // Hide loading, show the form since we're staying
+          document.getElementById('authLoading').classList.add('hide');
+          document.querySelector('.box').style.opacity = '1';
         }
       });
 
-      const params = new URLSearchParams(window.location.search);
-      const next = params.get("next") || "board.html";
+      // next already computed above
 
       document
         .getElementById("loginForm")
@@ -137,11 +200,14 @@
           const password = document.getElementById("password").value;
           const errorBox = document.getElementById("error");
           errorBox.textContent = "";
-          if (!email.endsWith("@hwemail.com")) {
-            errorBox.textContent = "Please use your @hwemail.com email.";
+          if (!(email.endsWith("@hwemail.com") || email.endsWith("@hw.com"))) {
+            errorBox.textContent = "Please use your @hwemail.com or @hw.com email.";
             return;
           }
           try {
+            if (redirectHandled) return;
+            redirectHandled = true;
+            
             const cred = await auth.signInWithEmailAndPassword(email, password);
             await db.collection("users").doc(cred.user.uid).set(
               {
@@ -150,17 +216,62 @@
               },
               { merge: true }
             );
-            const doc = await db.collection("users").doc(cred.user.uid).get();
+            let doc = await db.collection("users").doc(cred.user.uid).get();
             if (!doc.exists || !doc.data().role) {
               await db
                 .collection("users")
                 .doc(cred.user.uid)
                 .set({ role: "student" }, { merge: true });
+              // Re-fetch to get the updated role
+              doc = await db.collection("users").doc(cred.user.uid).get();
             }
-            window.location.href = next;
+            // Check role if trying to go to admin
+            const destination = next || "board.html";
+            if (destination === 'admin.html') {
+              const role = doc.exists ? (doc.data().role || null) : null;
+              console.log('Post-login role check:', role, 'destination:', destination);
+              if (role === 'Admin' || role === 'Head' || role === 'Developer') {
+                window.location.href = destination;
+              } else {
+                const url = new URL('board.html', window.location.href);
+                url.searchParams.set('err', 'admin_denied');
+                window.location.href = url.toString();
+              }
+            } else {
+              window.location.href = destination;
+            }
           } catch (err) {
             errorBox.textContent =
               err && err.message ? err.message : "Login failed";
+          }
+        });
+      
+      // Forgot password handler
+      document
+        .getElementById("forgotPasswordLink")
+        .addEventListener("click", async function (e) {
+          e.preventDefault();
+          const emailEl = document.getElementById("email");
+          const email = (emailEl ? emailEl.value : "").trim();
+          const errorBox = document.getElementById("error");
+          const infoBox = document.getElementById("info");
+          errorBox.textContent = "";
+          infoBox.textContent = "";
+          if (!email) {
+            errorBox.textContent = "Enter your email above to reset your password.";
+            return;
+          }
+          if (!(email.endsWith("@hwemail.com") || email.endsWith("@hw.com"))) {
+            errorBox.textContent = "Please use your @hwemail.com or @hw.com email.";
+            return;
+          }
+          try {
+            await auth.sendPasswordResetEmail(email);
+            infoBox.textContent =
+              "Password reset link sent to " + email + ". Check your inbox. Keep in mind that it may take a few minutes to arrive.";
+          } catch (err) {
+            errorBox.textContent =
+              err && err.message ? err.message : "Failed to send reset email";
           }
         });
     </script>

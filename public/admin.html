@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Console</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script src="common-auth.js"></script>
+    <script src="firebase-config.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f7f7fb; color:#111827; }
+      .shell { max-width: 1400px; margin: 64px auto 40px; padding: 0 16px; }
+      h1 { margin:0 0 4px; font-size:28px; }
+      h2 { margin:16px 0 8px; font-size:18px; }
+      .tabs { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+      .tab { padding:10px 14px; border:1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; font-weight:500; transition:all 0.15s; }
+      .tab:hover { background:#f9fafb; }
+      .tab.active { background:#1a57d6; color:#fff; border-color:#1a57d6; }
+      .panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px; box-shadow:0 6px 16px rgba(0,0,0,0.05); min-height:200px; }
+      .filters { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+      .filters input, .filters select { padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; }
+      .filters button { padding:8px 12px; background:#1a57d6; color:#fff; border:0; border-radius:6px; cursor:pointer; font-weight:500; }
+      .filters button:hover { background:#1547ad; }
+      .filters button.secondary { background:#6b7280; }
+      .filters button.secondary:hover { background:#4b5563; }
+      .item { display:flex; gap:12px; padding:12px; border:1px solid #e5e7eb; border-radius:8px; margin:8px 0; align-items:center; }
+      .item:hover { background:#fafbfc; }
+      .grow { flex:1 1 auto; }
+      .right { display:flex; gap:8px; align-items:center; margin-left:auto; }
+      .pill { display:inline-flex; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px; background:#fafafa; font-size:12px; }
+      .pill.pending { background:#fef3c7; border-color:#fcd34d; color:#92400e; }
+      .pill.approved { background:#d1fae5; border-color:#6ee7b7; color:#065f46; }
+      .pill.rejected { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
+      .pill.scheduled { background:#dbeafe; border-color:#93c5fd; color:#1e40af; }
+      .btn { padding:8px 12px; border:1px solid #e5e7eb; background:#fff; border-radius:6px; cursor:pointer; font-weight:500; }
+      .btn.primary { background:#1a57d6; color:#fff; border-color:#1a57d6; }
+      .btn.primary:hover { background:#1547ad; }
+      .btn.secondary { background:#6b7280; color:#fff; border-color:#6b7280; }
+      .btn.secondary:hover { background:#4b5563; }
+      .btn.danger { background:#ef4444; color:#fff; border-color:#ef4444; }
+      .btn.danger:hover { background:#dc2626; }
+      .btn:disabled { opacity:0.5; cursor:not-allowed; }
+      a.back { position:fixed; top:18px; right:18px; background:#1a57d6; color:#fff; text-decoration:none; padding:10px 16px; border-radius:8px; font-weight:600; box-shadow:0 4px 14px rgba(26, 87, 214, 0.25); }
+      .empty { text-align:center; padding:24px; color:#9ca3af; }
+      table { width:100%; border-collapse:collapse; margin-top:8px; }
+      th { text-align:left; padding:10px 12px; border-bottom:2px solid #e5e7eb; font-weight:600; background:#f9fafb; }
+      td { padding:10px 12px; border-bottom:1px solid #f3f4f6; }
+      tr:hover { background:#fafbfc; }
+      .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-top:12px; }
+      .stat-card { padding:16px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+      .stat-card .label { font-size:13px; color:#6b7280; margin-bottom:4px; }
+      .stat-card .value { font-size:28px; font-weight:700; color:#1a57d6; }
+      .user-row { cursor:pointer; }
+      .user-row:hover { background:#f9fafb; }
+      .user-detail { display:none; background:#fafbfc; border-top:1px solid #e5e7eb; }
+      .user-detail.open { display:table-row; }
+      .user-detail td { padding:16px; }
+      .field-row { display:grid; grid-template-columns:120px 1fr; gap:8px; margin-bottom:8px; align-items:start; }
+      .field-row label { font-weight:600; padding-top:8px; }
+      .field-row input, .field-row select, .field-row textarea { padding:8px; border:1px solid #d1d5db; border-radius:6px; width:100%; }
+    </style>
+  </head>
+  <body>
+    <a href="board.html" class="back">Back to Board</a>
+    <div id="loadingBanner" style="max-width:1400px;margin:24px auto 0;padding:10px 12px;border-radius:8px;border:1px solid #dbeafe;background:#eff6ff;color:#1e40af">Checking admin access…</div>
+    <div class="shell" style="display:none">
+      <h1>Admin Console</h1>
+      <p id="who" style="color:#6b7280;margin:4px 0 16px"></p>
+      <div class="tabs">
+        <button class="tab active" data-tab="approvals">Class Approvals</button>
+        <button class="tab" data-tab="requests">Tutoring Requests</button>
+        <button class="tab" data-tab="sessions">Sessions</button>
+        <button class="tab" data-tab="hours">Hours</button>
+        <button class="tab" data-tab="users">Users & Roles</button>
+        <button class="tab" data-tab="calendar">Calendar Data</button>
+        <button class="tab" data-tab="analytics">Analytics</button>
+      </div>
+      <div id="approvals" class="panel"></div>
+      <div id="requests" class="panel" style="display:none"></div>
+      <div id="sessions" class="panel" style="display:none"></div>
+      <div id="hours" class="panel" style="display:none"></div>
+      <div id="users" class="panel" style="display:none"></div>
+      <div id="calendar" class="panel" style="display:none"></div>
+      <div id="analytics" class="panel" style="display:none"></div>
+    </div>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+      import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+      import { getFirestore, collection, getDocs, setDoc, doc, getDoc, query, where, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+       const app = initializeApp(window.__FIREBASE_CONFIG__);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+      await setPersistence(auth, browserLocalPersistence).catch(()=>{});
+
+      const who = document.getElementById('who');
+      const tabs = document.querySelectorAll('.tab');
+       const panels = { approvals: document.getElementById('approvals'), requests: document.getElementById('requests'), sessions: document.getElementById('sessions'), hours: document.getElementById('hours'), users: document.getElementById('users'), calendar: document.getElementById('calendar'), analytics: document.getElementById('analytics') };
+       const shell = document.querySelector('.shell');
+       const loadingBanner = document.getElementById('loadingBanner');
+      
+      tabs.forEach(t => t.addEventListener('click', () => {
+        tabs.forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        Object.keys(panels).forEach(k => panels[k].style.display = (k === t.dataset.tab ? 'block':'none'));
+      }));
+
+      function hasAdminRole(role) {
+        return role === 'Admin' || role === 'Head' || role === 'Developer';
+      }
+
+      const fmtDate = (raw) => {
+        try {
+          const d = new Date(raw);
+          if (!isNaN(d)) return d.toLocaleDateString();
+        } catch {}
+        return String(raw);
+      };
+
+      let navigated = false;
+      onAuthStateChanged(auth, async (user) => {
+       if (navigated) return;
+       if (!user) { navigated = true; window.location.replace('signin.html?next=admin.html'); return; }
+       try {
+         const ref = doc(db, 'users', user.uid);
+         const snap = await getDoc(ref);
+         const profile = snap.exists() ? (snap.data() || {}) : {};
+         const role = profile.role || null;
+         if (!hasAdminRole(role)) {
+           navigated = true;
+           const url = new URL('board.html', window.location.href);
+           url.searchParams.set('err', 'admin_denied');
+           window.location.replace(url.toString());
+           return;
+         }
+         who.textContent = `${user.email || ''} • ${role}`;
+         if (loadingBanner) loadingBanner.style.display = 'none';
+         shell.style.display = 'block';
+
+         // ========== TAB 1: CLASS APPROVALS ==========
+         async function loadApprovals() {
+           const approvals = panels.approvals;
+           approvals.innerHTML = '<h2>Class Approval Requests</h2><div class="filters"><input id="filterSubject" placeholder="Filter by subject..." /><input id="filterUser" placeholder="Search by name or email..." /><select id="filterStatus"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><button id="refreshApprovals">Refresh</button><div style="margin-left:auto;display:flex;align-items:center;gap:14px;font-size:14px;color:#6b7280;border-left:1px solid #e5e7eb;padding-left:14px"><span style="display:flex;align-items:center;gap:6px"><span style="color:#f59e0b;font-size:16px">●</span> Pending</span><span style="display:flex;align-items:center;gap:6px"><span style="color:#10b981;font-size:16px">●</span> All Approved</span><span style="display:flex;align-items:center;gap:6px"><span style="color:#ef4444;font-size:16px">●</span> Only Rejected</span></div></div><div id="approvalsList"></div>';
+           const filterSubject = document.getElementById('filterSubject');
+           const filterUser = document.getElementById('filterUser');
+           const filterStatus = document.getElementById('filterStatus');
+           const approvalsList = document.getElementById('approvalsList');
+           document.getElementById('refreshApprovals').addEventListener('click', renderApprovals);
+
+          async function renderApprovals() {
+            approvalsList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+            const snap = await getDocs(collection(db, 'ClassRequests'));
+            const items = [];
+            snap.forEach(d => { const r = d.data() || {}; items.push({ id: d.id, ...r }); });
+            
+            let filtered = items;
+            const subFilter = filterSubject.value.toLowerCase().trim();
+            const userFilter = filterUser.value.toLowerCase().trim();
+            const statFilter = filterStatus.value;
+            if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter));
+            if (userFilter) filtered = filtered.filter(r => (r.userName||'').toLowerCase().includes(userFilter) || (r.userEmail||'').toLowerCase().includes(userFilter));
+            if (statFilter) filtered = filtered.filter(r => r.status === statFilter);
+            
+            // Group by user
+            const byUser = {};
+            filtered.forEach(r => {
+              const key = r.userEmail || 'unknown';
+              if (!byUser[key]) {
+                byUser[key] = {
+                  name: r.userName || r.userEmail || 'Tutor',
+                  email: r.userEmail || '',
+                  requests: []
+                };
+              }
+              byUser[key].requests.push(r);
+            });
+            
+            // Sort users by name
+            const userList = Object.values(byUser).sort((a,b) => a.name.localeCompare(b.name));
+            
+            approvalsList.innerHTML = '';
+            if (userList.length === 0) {
+              approvalsList.innerHTML = '<div class="empty">No class requests found.</div>';
+              return;
+            }
+            
+            userList.forEach((userData, idx) => {
+              const userContainer = document.createElement('div');
+              userContainer.style.marginBottom = '12px';
+              
+              // User header (clickable)
+              const userHeader = document.createElement('div');
+              userHeader.className = 'item';
+              userHeader.style.cursor = 'pointer';
+              
+              // Track counts with object so they can be updated
+              const counts = {
+                pending: userData.requests.filter(r => r.status === 'pending').length,
+                approved: userData.requests.filter(r => r.status === 'approved').length,
+                rejected: userData.requests.filter(r => r.status === 'rejected').length
+              };
+              
+              // Determine bullet color: yellow if any pending, green if all approved, red if only rejected
+              const getBulletColor = () => {
+                if (counts.pending > 0) return '#f59e0b'; // yellow/amber
+                if (counts.approved === userData.requests.length) return '#10b981'; // green
+                if (counts.rejected > 0 && counts.approved === 0 && counts.pending === 0) return '#ef4444'; // red (only rejected)
+                return '#6b7280'; // default gray
+              };
+              
+              userHeader.innerHTML = `
+                <div class="grow">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:14px;color:${getBulletColor()}" id="arrow-${idx}">●</span>
+                    <strong>${userData.name}</strong> • ${userData.email}
+                  </div>
+                  <div style="margin-top:4px;font-size:13px;color:#6b7280">
+                    ${userData.requests.length} class${userData.requests.length !== 1 ? 'es' : ''} 
+                    ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
+                    ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
+                    ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
+                  </div>
+                </div>
+              `;
+              
+              // Classes list (hidden by default)
+              const classList = document.createElement('div');
+              classList.id = `classes-${idx}`;
+              classList.style.display = 'none';
+              classList.style.marginLeft = '32px';
+              classList.style.marginTop = '8px';
+              
+              // Sort classes: pending first, then by subject
+              userData.requests.sort((a,b) => {
+                const statusOrder = { pending: 0, approved: 1, rejected: 2 };
+                const aOrder = statusOrder[a.status] ?? 3;
+                const bOrder = statusOrder[b.status] ?? 3;
+                if (aOrder !== bOrder) return aOrder - bOrder;
+                return String(a.subject).localeCompare(String(b.subject));
+              });
+              
+              userData.requests.forEach(r => {
+                const classRow = document.createElement('div');
+                classRow.className = 'item';
+                classRow.style.marginBottom = '6px';
+                const statusClass = r.status === 'pending' ? 'pending' : r.status === 'approved' ? 'approved' : 'rejected';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'grow';
+                contentDiv.innerHTML = `
+                  <div>${r.subject} — ${r.class} <span class="pill ${statusClass}" id="status-${r.id}">${r.status}</span></div>
+                  <div style="font-size:12px;color:#6b7280;margin-top:4px">Requested: ${fmtDate(r.requestedAt)}</div>
+                `;
+                classRow.appendChild(contentDiv);
+                
+                if (r.status === 'pending') {
+                  const actions = document.createElement('div');
+                  actions.className = 'right';
+                  actions.id = `actions-${r.id}`;
+                  const approve = document.createElement('button'); 
+                  approve.textContent = 'Approve'; 
+                  approve.className = 'btn primary';
+                  const reject = document.createElement('button'); 
+                  reject.textContent = 'Reject'; 
+                  reject.className = 'btn';
+                  
+                  approve.addEventListener('click', async (e) => { 
+                    e.stopPropagation();
+                    approve.disabled = true; 
+                    reject.disabled = true; 
+                    await setDoc(doc(db, 'ClassRequests', r.id), { 
+                      status: 'approved', 
+                      decidedAt: new Date().toISOString(), 
+                      decidedByUid: user.uid, 
+                      decidedByName: user.displayName || user.email, 
+                      decidedByRole: role 
+                    }, { merge: true });
+                    
+                    // Update UI in place
+                    const statusPill = document.getElementById(`status-${r.id}`);
+                    if (statusPill) {
+                      statusPill.textContent = 'approved';
+                      statusPill.className = 'pill approved';
+                    }
+                    actions.remove();
+                    
+                    // Update counts
+                    counts.pending--;
+                    counts.approved++;
+                    
+                    // Update bullet color
+                    const arrow = document.getElementById(`arrow-${idx}`);
+                    if (arrow) {
+                      if (counts.pending > 0) {
+                        arrow.style.color = '#f59e0b'; // yellow
+                      } else if (counts.approved === userData.requests.length) {
+                        arrow.style.color = '#10b981'; // green
+                      } else if (counts.rejected > 0 && counts.approved === 0 && counts.pending === 0) {
+                        arrow.style.color = '#ef4444'; // red (only rejected)
+                      } else {
+                        arrow.style.color = '#6b7280'; // gray
+                      }
+                    }
+                    
+                    // Update counts in header
+                    const headerCounts = userHeader.querySelector('.grow > div:nth-child(2)');
+                    const totalClasses = userData.requests.length;
+                    headerCounts.innerHTML = `
+                      ${totalClasses} class${totalClasses !== 1 ? 'es' : ''} 
+                      ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
+                      ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
+                      ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
+                    `;
+                  });
+                  
+                  reject.addEventListener('click', async (e) => { 
+                    e.stopPropagation();
+                    approve.disabled = true; 
+                    reject.disabled = true; 
+                    await setDoc(doc(db, 'ClassRequests', r.id), { 
+                      status: 'rejected', 
+                      decidedAt: new Date().toISOString(), 
+                      decidedByUid: user.uid, 
+                      decidedByName: user.displayName || user.email, 
+                      decidedByRole: role 
+                    }, { merge: true });
+                    
+                    // Update UI in place
+                    const statusPill = document.getElementById(`status-${r.id}`);
+                    if (statusPill) {
+                      statusPill.textContent = 'rejected';
+                      statusPill.className = 'pill rejected';
+                    }
+                    actions.remove();
+                    
+                    // Update counts
+                    counts.pending--;
+                    counts.rejected++;
+                    
+                    // Update bullet color
+                    const arrow = document.getElementById(`arrow-${idx}`);
+                    if (arrow) {
+                      if (counts.pending > 0) {
+                        arrow.style.color = '#f59e0b'; // yellow
+                      } else if (counts.approved === userData.requests.length) {
+                        arrow.style.color = '#10b981'; // green
+                      } else if (counts.rejected > 0 && counts.approved === 0 && counts.pending === 0) {
+                        arrow.style.color = '#ef4444'; // red (only rejected)
+                      } else {
+                        arrow.style.color = '#6b7280'; // gray
+                      }
+                    }
+                    
+                    // Update counts in header
+                    const headerCounts = userHeader.querySelector('.grow > div:nth-child(2)');
+                    const totalClasses = userData.requests.length;
+                    headerCounts.innerHTML = `
+                      ${totalClasses} class${totalClasses !== 1 ? 'es' : ''} 
+                      ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
+                      ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
+                      ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
+                    `;
+                  });
+                  
+                  actions.appendChild(approve); 
+                  actions.appendChild(reject);
+                  classRow.appendChild(actions);
+                }
+                
+                classList.appendChild(classRow);
+              });
+              
+              // Toggle expand/collapse
+              userHeader.addEventListener('click', () => {
+                const isOpen = classList.style.display !== 'none';
+                classList.style.display = isOpen ? 'none' : 'block';
+                document.getElementById(`arrow-${idx}`).textContent = isOpen ? '●' : '○';
+              });
+              
+              userContainer.appendChild(userHeader);
+              userContainer.appendChild(classList);
+              approvalsList.appendChild(userContainer);
+            });
+          }
+           filterSubject.addEventListener('input', renderApprovals);
+           filterUser.addEventListener('input', renderApprovals);
+           filterStatus.addEventListener('change', renderApprovals);
+           renderApprovals();
+         }
+         loadApprovals();
+
+         // ========== TAB 2: TUTORING REQUESTS ==========
+         async function loadRequests() {
+           const container = panels.requests;
+           container.innerHTML = '<h2>All Tutoring Requests</h2><div class="filters"><input id="filterReqSubject" placeholder="Filter by subject/class..." /><button id="refreshReq">Refresh</button></div><div id="reqList"></div>';
+           const filterReqSubject = document.getElementById('filterReqSubject');
+           const reqList = document.getElementById('reqList');
+           document.getElementById('refreshReq').addEventListener('click', renderRequests);
+
+           async function renderRequests() {
+             reqList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'Requests'));
+             const items = [];
+             snap.forEach(d => { const r = d.data() || {}; items.push({ id: d.id, ...r }); });
+             
+             let filtered = items;
+             const subFilter = filterReqSubject.value.toLowerCase().trim();
+             if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter) || (r.name||'').toLowerCase().includes(subFilter));
+             
+             reqList.innerHTML = '';
+             if (filtered.length === 0) {
+               reqList.innerHTML = '<div class="empty">No tutoring requests found.</div>';
+               return;
+             }
+             filtered.forEach((r) => {
+               const row = document.createElement('div');
+               row.className = 'item';
+               const avail = Array.isArray(r.availability) ? r.availability.map(s => `${s.date} Day${s.cycleDay} ${s.block}`).join(', ') : 'N/A';
+               row.innerHTML = `
+                 <div class="grow">
+                   <div><strong>${r.name || 'Student'}</strong> • ${r.email || ''}</div>
+                   <div style="margin-top:4px">${r.subject} — ${r.class} <span class="pill">Grade ${r.grade||'?'}</span></div>
+                   <div style="font-size:13px;color:#6b7280;margin-top:4px">Topic: ${r.topic || '—'} | Location: ${r.location || '—'}</div>
+                   <div style="font-size:12px;color:#9ca3af;margin-top:2px">Availability: ${avail}</div>
+                 </div>
+                 <div class="right">
+                   <button class="btn danger" data-id="${r.id}">Delete</button>
+                 </div>
+               `;
+               row.querySelector('.btn.danger').addEventListener('click', async (e) => {
+                 if (!confirm('Delete this tutoring request?')) return;
+                 e.target.disabled = true;
+                 await deleteDoc(doc(db, 'Requests', r.id));
+                 renderRequests();
+               });
+               reqList.appendChild(row);
+             });
+           }
+           filterReqSubject.addEventListener('input', renderRequests);
+           renderRequests();
+         }
+
+         // ========== TAB 3: SESSIONS ==========
+         async function loadSessions() {
+           const container = panels.sessions;
+           container.innerHTML = '<h2>All Sessions</h2><div class="filters"><select id="filterSessionStatus"><option value="">All</option><option value="scheduled">Scheduled</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select><input id="filterSessionSubject" placeholder="Filter by subject/tutor/student..." /><button id="refreshSessions">Refresh</button></div><div id="sessionsList"></div>';
+           const filterSessionStatus = document.getElementById('filterSessionStatus');
+           const filterSessionSubject = document.getElementById('filterSessionSubject');
+           const sessionsList = document.getElementById('sessionsList');
+           document.getElementById('refreshSessions').addEventListener('click', renderSessions);
+
+           async function renderSessions() {
+             sessionsList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'Sessions'));
+             const items = [];
+             snap.forEach(d => { const s = d.data() || {}; items.push({ id: d.id, ...s }); });
+             
+             let filtered = items;
+             const statFilter = filterSessionStatus.value;
+             const subFilter = filterSessionSubject.value.toLowerCase().trim();
+             if (statFilter) filtered = filtered.filter(s => s.status === statFilter);
+             if (subFilter) filtered = filtered.filter(s => (s.subject||'').toLowerCase().includes(subFilter) || (s.tutorName||'').toLowerCase().includes(subFilter) || (s.name||'').toLowerCase().includes(subFilter));
+             
+             filtered.sort((a,b) => {
+               const aDate = new Date(a.slot?.date||0);
+               const bDate = new Date(b.slot?.date||0);
+               return bDate - aDate;
+             });
+             sessionsList.innerHTML = '';
+             if (filtered.length === 0) {
+               sessionsList.innerHTML = '<div class="empty">No sessions found.</div>';
+               return;
+             }
+             filtered.forEach((s) => {
+               const row = document.createElement('div');
+               row.className = 'item';
+               const statusClass = s.status === 'scheduled' ? 'scheduled' : s.status === 'completed' ? 'approved' : 'rejected';
+               const slotLabel = `${s.slot?.date||'?'} Day ${s.slot?.cycleDay||'?'} ${s.slot?.block||'?'}`;
+               row.innerHTML = `
+                 <div class="grow">
+                   <div><strong>${s.name || 'Student'}</strong> • ${s.email || ''} <span class="pill ${statusClass}">${s.status||'scheduled'}</span></div>
+                   <div style="margin-top:4px">${s.subject} — ${s.class} | Tutor: ${s.tutorName || '—'}</div>
+                   <div style="font-size:13px;color:#6b7280;margin-top:4px">Slot: ${slotLabel} | Location: ${s.location || '—'}</div>
+                 </div>
+                 <div class="right">
+                   <button class="btn danger" data-id="${s.id}">Delete</button>
+                 </div>
+               `;
+               row.querySelector('.btn.danger').addEventListener('click', async (e) => {
+                 if (!confirm('Delete this session?')) return;
+                 e.target.disabled = true;
+                 await deleteDoc(doc(db, 'Sessions', s.id));
+                 renderSessions();
+               });
+               sessionsList.appendChild(row);
+             });
+           }
+           filterSessionStatus.addEventListener('change', renderSessions);
+           filterSessionSubject.addEventListener('input', renderSessions);
+           renderSessions();
+         }
+
+         // ========== TAB 4: HOURS ==========
+         async function loadHours() {
+           const container = panels.hours;
+           container.innerHTML = '<h2>Tutor Hours</h2><div class="filters"><input id="filterHourUser" placeholder="Search by name or email..." /><button id="refreshHours">Refresh</button></div><div id="hoursList"></div>';
+           const filterHourUser = document.getElementById('filterHourUser');
+           const hoursList = document.getElementById('hoursList');
+           document.getElementById('refreshHours').addEventListener('click', renderHours);
+
+           const blocksCatalog = {
+             "1": "Block 1", "M11": "Junior Seminar", "2": "Block 2", "L": "Lunch",
+             "3": "Block 3", "DS": "DS", "CC": "CC (3:15-4:00)", "4": "Block 4",
+             "M10": "Soph. Seminar", "5": "Block 5", "6": "Block 6", "7": "Block 7",
+             "FC": "Faculty Collaboration", "M12": "Senior Seminar", "CT": "Community Time",
+             "OH": "Office Hours",
+           };
+
+           async function renderHours() {
+             hoursList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'Hours'));
+             const items = [];
+             snap.forEach(d => { const h = d.data() || {}; items.push({ id: d.id, ...h }); });
+             
+             let filtered = items;
+             const userFilter = filterHourUser.value.toLowerCase().trim();
+             if (userFilter) filtered = filtered.filter(h => (h.tutorName||'').toLowerCase().includes(userFilter) || (h.tutorEmail||'').toLowerCase().includes(userFilter));
+             
+             // Group by tutor
+             const byTutor = {};
+             filtered.forEach(h => {
+               const key = h.tutorEmail || h.tutorUid || 'unknown';
+               if (!byTutor[key]) {
+                 byTutor[key] = {
+                   name: h.tutorName || h.tutorEmail || 'Unknown',
+                   email: h.tutorEmail || '',
+                   uid: h.tutorUid || '',
+                   hours: []
+                 };
+               }
+               byTutor[key].hours.push(h);
+             });
+             
+             // Sort tutors by name
+             const tutorList = Object.values(byTutor).sort((a,b) => a.name.localeCompare(b.name));
+             
+             hoursList.innerHTML = '';
+             if (tutorList.length === 0) {
+               hoursList.innerHTML = '<div class="empty">No hours found.</div>';
+               return;
+             }
+             
+             tutorList.forEach((tutorData, idx) => {
+               const tutorContainer = document.createElement('div');
+               tutorContainer.style.marginBottom = '12px';
+               
+               // Sort hours by date (most recent first)
+               tutorData.hours.sort((a,b) => {
+                 const aDate = new Date(a.date || 0);
+                 const bDate = new Date(b.date || 0);
+                 return bDate - aDate;
+               });
+               
+               const totalHours = tutorData.hours.length;
+               const selfReported = tutorData.hours.filter(h => h.type === 'self_reported').length;
+               const autoTracked = tutorData.hours.filter(h => h.type === 'completed_session').length;
+               
+               // Tutor header (clickable)
+               const tutorHeader = document.createElement('div');
+               tutorHeader.className = 'item';
+               tutorHeader.style.cursor = 'pointer';
+               
+               tutorHeader.innerHTML = `
+                 <div class="grow">
+                   <div style="display:flex;align-items:center;gap:8px">
+                     <span style="font-size:14px" id="hour-arrow-${idx}">●</span>
+                     <strong>${tutorData.name}</strong> • ${tutorData.email}
+                   </div>
+                   <div style="margin-top:4px;font-size:13px;color:#6b7280">
+                     ${totalHours} hour${totalHours !== 1 ? 's' : ''} 
+                     ${autoTracked > 0 ? `(${autoTracked} auto-tracked)` : ''}
+                     ${selfReported > 0 ? `(${selfReported} self-reported)` : ''}
+                   </div>
+                 </div>
+               `;
+               
+               // Hours list (hidden by default)
+               const hourDetailsList = document.createElement('div');
+               hourDetailsList.id = `hour-details-${idx}`;
+               hourDetailsList.style.display = 'none';
+               hourDetailsList.style.marginLeft = '32px';
+               hourDetailsList.style.marginTop = '8px';
+               
+               tutorData.hours.forEach(h => {
+                 const hourRow = document.createElement('div');
+                 hourRow.className = 'item';
+                 hourRow.style.marginBottom = '6px';
+                 const blockName = blocksCatalog[h.block] || h.block;
+                 const typeClass = h.type === 'self_reported' ? 'pending' : 'approved';
+                 const typeLabel = h.type === 'self_reported' ? 'Self-Reported' : 'Auto-Tracked';
+                 
+                 hourRow.innerHTML = `
+                   <div class="grow">
+                     <div><strong>${h.date || 'N/A'}</strong> • Day ${h.cycleDay || '?'} • ${blockName} <span class="pill ${typeClass}">${typeLabel}</span></div>
+                     ${h.subject ? `<div style="font-size:12px;color:#6b7280;margin-top:4px">${h.subject}${h.class ? ` — ${h.class}` : ''}</div>` : ''}
+                     ${h.description ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">${h.description}</div>` : ''}
+                     ${h.studentName ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">Student: ${h.studentName}</div>` : ''}
+                     <div style="font-size:11px;color:#9ca3af;margin-top:2px">Added: ${h.createdAt || 'N/A'}</div>
+                   </div>
+                 `;
+                 
+                 hourDetailsList.appendChild(hourRow);
+               });
+               
+               // Toggle expand/collapse
+               tutorHeader.addEventListener('click', () => {
+                 const isOpen = hourDetailsList.style.display !== 'none';
+                 hourDetailsList.style.display = isOpen ? 'none' : 'block';
+                 document.getElementById(`hour-arrow-${idx}`).textContent = isOpen ? '●' : '○';
+               });
+               
+               tutorContainer.appendChild(tutorHeader);
+               tutorContainer.appendChild(hourDetailsList);
+               hoursList.appendChild(tutorContainer);
+             });
+           }
+           filterHourUser.addEventListener('input', renderHours);
+           renderHours();
+         }
+
+         // ========== TAB 5: USERS & ROLES ==========
+         async function loadUsers() {
+           const container = panels.users;
+           container.innerHTML = '<h2>Users & Roles</h2><p style="color:#6b7280;font-size:14px">Click Edit to modify user details, or Add User to create a new account.</p><div class="filters"><input id="filterUser" placeholder="Search by name/email..." /><button id="refreshUsers">Refresh</button><button id="addUser" class="btn primary" style="margin-left:auto">+ Add User</button></div><div id="usersList"></div>';
+           const filterUser = document.getElementById('filterUser');
+           const usersList = document.getElementById('usersList');
+           document.getElementById('refreshUsers').addEventListener('click', renderUsers);
+
+           const roleOptions = ['student', 'Admin', 'Head', 'Developer', 'Math Lead', 'Science Lead', 'English Lead', 'History Lead', 'World Language Lead', 'Computer Science Lead'];
+
+           document.getElementById('addUser').addEventListener('click', async () => {
+             const name = prompt('Enter full name:');
+             if (!name) return;
+             const email = prompt('Enter @hwemail.com or @hw.com email:');
+             if (!email || !(email.endsWith('@hwemail.com') || email.endsWith('@hw.com'))) { alert('Invalid email'); return; }
+             const password = prompt('Enter temporary password (min 6 chars):');
+             if (!password || password.length < 6) { alert('Password must be at least 6 characters'); return; }
+             
+             try {
+               // Note: Client SDK can't create users directly; this requires Admin SDK
+               // Workaround: User must sign up via signup.html, or we need a Cloud Function
+               alert('To add users, either:\\n1. Have them sign up at signup.html\\n2. Create a Cloud Function for admin user creation\\n\\nFor now, you can manually edit an existing user or wait for them to sign up.');
+             } catch (e) {
+               alert('Error: ' + (e.message || 'Failed to create user'));
+             }
+           });
+
+           async function renderUsers() {
+             usersList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
+             const snap = await getDocs(collection(db, 'users'));
+             const items = [];
+             snap.forEach(d => { 
+               const u = d.data() || {};
+               if (!u.deleted) items.push({ uid: d.id, ...u });
+             });
+             
+             let filtered = items;
+             const userFilter = filterUser.value.toLowerCase().trim();
+             if (userFilter) filtered = filtered.filter(u => (u.name||'').toLowerCase().includes(userFilter) || (u.email||'').toLowerCase().includes(userFilter));
+             
+             filtered.sort((a,b) => String(a.name||a.email).localeCompare(String(b.name||b.email)));
+             usersList.innerHTML = '';
+             if (filtered.length === 0) {
+               usersList.innerHTML = '<div class="empty">No users found.</div>';
+               return;
+             }
+             
+             const table = document.createElement('table');
+             table.innerHTML = '<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Grade</th><th>Classes</th><th>Actions</th></tr></thead><tbody></tbody>';
+             const tbody = table.querySelector('tbody');
+             filtered.forEach((u, idx) => {
+               const tr = document.createElement('tr');
+               tr.className = 'user-row';
+               const classes = Array.isArray(u.classes) ? u.classes.slice(0,3).join(', ') + (u.classes.length > 3 ? '...' : '') : (u.classes||'—');
+               const currentRole = u.role || 'student';
+               
+               tr.innerHTML = `
+                 <td>${u.name || '—'}</td>
+                 <td>${u.email || '—'}</td>
+                 <td><span class="pill">${currentRole}</span></td>
+                 <td>${u.grade || '—'}</td>
+                 <td style="font-size:12px;color:#6b7280">${classes}</td>
+                 <td><button class="btn" data-uid="${u.uid}">Edit</button></td>
+               `;
+               
+               const detailTr = document.createElement('tr');
+               detailTr.className = 'user-detail';
+               detailTr.id = `detail-${u.uid}`;
+               const detailTd = document.createElement('td');
+               detailTd.colSpan = 6;
+               
+               const roleDropdown = roleOptions.map(r => `<option value="${r}" ${r === currentRole ? 'selected' : ''}>${r}</option>`).join('');
+               const classesText = Array.isArray(u.classes) ? u.classes.join(', ') : '';
+               
+               detailTd.innerHTML = `
+                 <div style="max-width:800px">
+                   <h3 style="margin:0 0 12px">Edit User: ${u.name || u.email || 'User'}</h3>
+                   <div class="field-row">
+                     <label>Name</label>
+                     <input id="name-${u.uid}" value="${u.name || ''}" />
+                   </div>
+                   <div class="field-row">
+                     <label>Email</label>
+                     <input id="email-${u.uid}" value="${u.email || ''}" disabled style="background:#f3f4f6;cursor:not-allowed" />
+                   </div>
+                   <div class="field-row">
+                     <label>Role</label>
+                     <select id="role-${u.uid}">${roleDropdown}</select>
+                   </div>
+                   <div class="field-row">
+                     <label>Grade</label>
+                     <select id="grade-${u.uid}">
+                       <option value="">None</option>
+                       <option value="10" ${u.grade==='10'?'selected':''}>10</option>
+                       <option value="11" ${u.grade==='11'?'selected':''}>11</option>
+                       <option value="12" ${u.grade==='12'?'selected':''}>12</option>
+                     </select>
+                   </div>
+                   <div class="field-row">
+                     <label>Classes (comma-separated)</label>
+                     <textarea id="classes-${u.uid}" rows="3" placeholder="Geometry, AP Calculus AB, ...">${classesText}</textarea>
+                   </div>
+                   <div style="display:flex;gap:8px;margin-top:12px">
+                     <button class="btn primary" id="save-${u.uid}">Save All Changes</button>
+                     <button class="btn" id="cancel-${u.uid}">Cancel</button>
+                     <button class="btn danger" id="delete-${u.uid}" style="margin-left:auto">Delete User</button>
+                   </div>
+                 </div>
+               `;
+               detailTr.appendChild(detailTd);
+               
+               tbody.appendChild(tr);
+               tbody.appendChild(detailTr);
+               
+               tr.querySelector('.btn').addEventListener('click', () => {
+                 const detail = document.getElementById(`detail-${u.uid}`);
+                 detail.classList.toggle('open');
+               });
+               
+               const saveBtn = detailTd.querySelector(`#save-${u.uid}`);
+               const cancelBtn = detailTd.querySelector(`#cancel-${u.uid}`);
+               const deleteBtn = detailTd.querySelector(`#delete-${u.uid}`);
+               
+               cancelBtn.addEventListener('click', () => {
+                 document.getElementById(`detail-${u.uid}`).classList.remove('open');
+               });
+               
+               deleteBtn.addEventListener('click', async () => {
+                 if (!confirm(`Delete user ${u.name || u.email}? This will remove their Firestore data but NOT their Firebase Auth account (they can still sign in but will have no profile).`)) return;
+                 deleteBtn.disabled = true;
+                 deleteBtn.textContent = 'Deleting...';
+                 try {
+                   await setDoc(doc(db, 'users', u.uid), { deleted: true, deletedAt: new Date().toISOString(), deletedBy: user.uid }, { merge: true });
+                   alert('User marked as deleted. To fully remove Firebase Auth account, use Firebase Console or Admin SDK.');
+                   renderUsers();
+                 } catch (err) {
+                   console.error('Delete error:', err);
+                   alert('Error: ' + (err.message || 'Failed to delete'));
+                   deleteBtn.disabled = false;
+                   deleteBtn.textContent = 'Delete User';
+                 }
+               });
+               
+               saveBtn.addEventListener('click', async () => {
+                 saveBtn.disabled = true;
+                 saveBtn.textContent = 'Saving...';
+                 try {
+                   const name = document.getElementById(`name-${u.uid}`).value.trim();
+                   const role = document.getElementById(`role-${u.uid}`).value;
+                   const grade = document.getElementById(`grade-${u.uid}`).value;
+                   const classesRaw = document.getElementById(`classes-${u.uid}`).value;
+                   const classes = classesRaw.split(',').map(c => c.trim()).filter(Boolean);
+                   
+                   await setDoc(doc(db, 'users', u.uid), {
+                     name: name || null,
+                     role: role,
+                     grade: grade || null,
+                     classes: classes
+                   }, { merge: true });
+                   
+                   saveBtn.textContent = '✓ Saved';
+                   setTimeout(() => {
+                     saveBtn.textContent = 'Save All Changes';
+                     saveBtn.disabled = false;
+                     renderUsers();
+                   }, 1000);
+                 } catch (err) {
+                   console.error('Save error:', err);
+                   saveBtn.textContent = 'Error - ' + (err.message || 'Failed');
+                   setTimeout(() => { saveBtn.textContent = 'Save All Changes'; saveBtn.disabled = false; }, 2000);
+                 }
+               });
+             });
+             usersList.appendChild(table);
+           }
+           filterUser.addEventListener('input', renderUsers);
+           renderUsers();
+         }
+
+         // ========== TAB 5: CALENDAR DATA ==========
+         async function loadCalendar() {
+           const container = panels.calendar;
+           container.innerHTML = `
+             <h2>Cycle Calendar Management</h2>
+             <p style="color:#6b7280;margin-bottom:16px">Import cycle day schedule from the school's XML feed to preserve historical data in Firestore.</p>
+             <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+               <button id="importXmlBtn" class="btn primary">Import from XML</button>
+               <button id="importIcsBtn" class="btn primary">Import from ICS Feed</button>
+               <button id="backfillBtn" class="btn primary">Backfill Missing Periods</button>
+               <button id="refreshCalendarBtn" class="btn secondary">Refresh View</button>
+               <button id="inspectXmlBtn" class="btn secondary">Inspect XML</button>
+             </div>
+             <div id="calendarStatus" style="padding:12px;border-radius:8px;margin-bottom:16px;display:none"></div>
+             <div id="calendarData"></div>
+           `;
+
+           const importBtn = document.getElementById('importXmlBtn');
+           const importIcsBtn = document.getElementById('importIcsBtn');
+           const backfillBtn = document.getElementById('backfillBtn');
+           const refreshBtn = document.getElementById('refreshCalendarBtn');
+           const inspectBtn = document.getElementById('inspectXmlBtn');
+           const statusDiv = document.getElementById('calendarStatus');
+           const dataDiv = document.getElementById('calendarData');
+
+           async function refreshCalendarView() {
+             try {
+               dataDiv.innerHTML = '<p style="text-align:center;padding:24px;color:#6b7280">Loading...</p>';
+               const snapshot = await getDocs(collection(db, 'cycleDays'));
+               const days = [];
+               snapshot.forEach(d => {
+                 days.push({ id: d.id, ...d.data() });
+               });
+               
+               days.sort((a, b) => a.id.localeCompare(b.id));
+               
+               if (days.length === 0) {
+                 dataDiv.innerHTML = '<p style="text-align:center;padding:24px;color:#6b7280">No cycle days in database. Click "Import All Days from XML" to import current data.</p>';
+                 return;
+               }
+
+               let html = `<p style="color:#6b7280;margin-bottom:8px">Total: <strong>${days.length} days</strong></p><table><thead><tr><th>Date</th><th>Day</th><th>Summary</th><th>Periods</th><th>Last Updated</th></tr></thead><tbody>`;
+               days.forEach(d => {
+                 const date = d.id;
+                 const day = d.day || '-';
+                 const summary = d.summary || '-';
+                 const periodCount = (d.periods || []).length;
+                 const updated = d.updatedAt ? fmtDate(d.updatedAt.toDate ? d.updatedAt.toDate() : d.updatedAt) : '-';
+                 html += `<tr><td>${date}</td><td>${day}</td><td>${summary}</td><td>${periodCount} periods</td><td>${updated}</td></tr>`;
+               });
+               html += '</tbody></table>';
+               dataDiv.innerHTML = html;
+             } catch (err) {
+               console.error(err);
+               dataDiv.innerHTML = '<p style="color:#ef4444">Error loading calendar data.</p>';
+             }
+           }
+
+           importBtn.addEventListener('click', async () => {
+             if (!confirm('This will fetch all days from the school XML and save them to Firestore. Continue?')) return;
+             
+             importBtn.disabled = true;
+             importBtn.textContent = 'Importing...';
+             statusDiv.style.display = 'block';
+             statusDiv.style.background = '#eff6ff';
+             statusDiv.style.border = '1px solid #dbeafe';
+             statusDiv.style.color = '#1e40af';
+             statusDiv.textContent = 'Fetching XML...';
+
+             try {
+               const url = 'https://www.hw.com/portals/0/reports/DailySchedulesUS.xml?t=' + Math.random();
+               const res = await fetch(url);
+               const text = await res.text();
+               const xml = new window.DOMParser().parseFromString(text, 'text/xml');
+               
+               const calendarDays = Array.from(xml.getElementsByTagName('CalendarDay'));
+               statusDiv.textContent = `Found ${calendarDays.length} days in XML. Saving to Firestore...`;
+
+               let saved = 0;
+               let skipped = 0;
+               let totalPeriods = 0;
+               
+               for (const dayNode of calendarDays) {
+                 const dateStr = dayNode.getElementsByTagName('Date')[0]?.textContent.trim();
+                 if (!dateStr) continue;
+                 
+                 // Convert MM/DD/YYYY to YYYY-MM-DD for document ID
+                 const [mm, dd, yyyy] = dateStr.split('/');
+                 const docId = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+                 
+                 const cycleDay = dayNode.getElementsByTagName('CycleDay')[0]?.textContent.trim() || null;
+                 const summary = dayNode.getElementsByTagName('SchoolDayDescription')[0]?.textContent.trim() || null;
+                 
+                 // Extract periods - check if they're children of the CalendarDay node
+                 const periods = [];
+                 
+                 // First try: direct Period children
+                 let periodNodes = Array.from(dayNode.getElementsByTagName('Period'));
+                 
+                 // If no periods found, try looking in a Periods container
+                 if (periodNodes.length === 0) {
+                   const periodsContainer = dayNode.getElementsByTagName('Periods')[0];
+                   if (periodsContainer) {
+                     periodNodes = Array.from(periodsContainer.getElementsByTagName('Period'));
+                   }
+                 }
+                 
+                 // If still no periods, try childNodes approach
+                 if (periodNodes.length === 0 && dayNode.childNodes) {
+                   for (let child of dayNode.childNodes) {
+                     if (child.nodeName === 'Period') {
+                       periodNodes.push(child);
+                     }
+                   }
+                 }
+                 
+                 periodNodes.forEach(p => {
+                   const code = p.getElementsByTagName('PeriodCode')[0]?.textContent.trim() || '';
+                   const start = p.getElementsByTagName('StartTime')[0]?.textContent.trim() || '';
+                   const end = p.getElementsByTagName('EndTime')[0]?.textContent.trim() || '';
+                   if (code) {
+                     periods.push({ code, start, end });
+                     totalPeriods++;
+                   }
+                 });
+                 
+                 try {
+                   await setDoc(doc(db, 'cycleDays', docId), {
+                     day: cycleDay,
+                     summary: summary,
+                     periods: periods,
+                     updatedAt: serverTimestamp()
+                   });
+                   saved++;
+                   
+                   // Log first few for debugging
+                   if (saved <= 3) {
+                     console.log(`${docId}: ${periods.length} periods`, periods);
+                   }
+                 } catch (err) {
+                   console.error(`Failed to save ${docId}:`, err);
+                   skipped++;
+                 }
+               }
+
+               statusDiv.style.background = '#d1fae5';
+               statusDiv.style.border = '1px solid #6ee7b7';
+               statusDiv.style.color = '#065f46';
+               statusDiv.textContent = `Import complete! Saved ${saved} days with ${totalPeriods} total periods. ${skipped > 0 ? 'Skipped ' + skipped + ' due to errors.' : ''} Check browser console for details.`;
+               
+               await refreshCalendarView();
+             } catch (err) {
+               console.error(err);
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.textContent = 'Import failed: ' + err.message;
+             } finally {
+               importBtn.disabled = false;
+               importBtn.textContent = 'Import All Days from XML';
+             }
+           });
+
+           // One-time backfill script: populate periods for any day missing them, based on cycle day (1-6)
+           backfillBtn.addEventListener('click', async () => {
+             if (!confirm('Backfill all cycleDays that have no periods using the standard templates for Day 1-6? This will update existing docs.')) return;
+ 
+             backfillBtn.disabled = true;
+             backfillBtn.textContent = 'Backfilling...';
+             statusDiv.style.display = 'block';
+             statusDiv.style.background = '#eff6ff';
+             statusDiv.style.border = '1px solid #dbeafe';
+             statusDiv.style.color = '#1e40af';
+             statusDiv.textContent = 'Scanning cycleDays...';
+ 
+             // Canonical period templates (times match the XML; date component is 1/1/1900)
+             const t = {
+               '1': [
+                 { code: '1',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M11',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:25:00 AM' },
+                 { code: '2',  start: '1/1/1900 10:30:00 AM', end: '1/1/1900 11:45:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:45:00 AM', end: '1/1/1900 12:45:00 PM' },
+                 { code: '3',  start: '1/1/1900 12:45:00 PM', end: '1/1/1900 2:00:00 PM' },
+                 { code: 'B1', start: '1/1/1900 2:00:00 PM',  end: '1/1/1900 2:15:00 PM' },
+                 { code: 'DS', start: '1/1/1900 2:15:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '2': [
+                 { code: '4',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M10',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 9:55:00 AM' },
+                 { code: '5',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: '6',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
+                 { code: '7',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '3': [
+                 { code: 'FC', start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:50:00 AM' },
+                 { code: '2',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: '3',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
+                 { code: '1',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '4': [
+                 { code: '5',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M12',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 9:55:00 AM' },
+                 { code: '6',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: '7',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
+                 { code: '4',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '5': [
+                 { code: '3',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'CT', start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:25:00 AM' },
+                 { code: '1',  start: '1/1/1900 10:30:00 AM', end: '1/1/1900 11:45:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:45:00 AM', end: '1/1/1900 12:45:00 PM' },
+                 { code: '2',  start: '1/1/1900 12:45:00 PM', end: '1/1/1900 2:00:00 PM' },
+                 { code: 'B1', start: '1/1/1900 2:00:00 PM',  end: '1/1/1900 2:15:00 PM' },
+                 { code: 'DS', start: '1/1/1900 2:15:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+               '6': [
+                 { code: '6',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
+                 { code: 'OH', start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:00:00 AM' },
+                 { code: '7',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: '4',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
+                 { code: '5',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+               ],
+             };
+ 
+             try {
+               const snap = await getDocs(collection(db, 'cycleDays'));
+               let updated = 0;
+               let skipped = 0;
+ 
+               for (const d of snap.docs) {
+                 const id = d.id;
+                 const data = d.data() || {};
+                 const existing = Array.isArray(data.periods) ? data.periods : [];
+                 const dayVal = (data.day == null) ? null : String(data.day).trim();
+                 if (!dayVal || !t[dayVal]) {
+                   skipped++;
+                   continue;
+                 }
+                 if (existing.length > 0) {
+                   skipped++;
+                   continue;
+                 }
+ 
+                 await setDoc(doc(db, 'cycleDays', id), {
+                   periods: t[dayVal],
+                   summary: data.summary || `US Day ${dayVal}`,
+                   updatedAt: serverTimestamp(),
+                 }, { merge: true });
+                 updated++;
+               }
+ 
+               statusDiv.style.background = '#d1fae5';
+               statusDiv.style.border = '1px solid #6ee7b7';
+               statusDiv.style.color = '#065f46';
+               statusDiv.textContent = `Backfill complete. Updated ${updated} days. Skipped ${skipped} (already had periods or missing/unknown cycle day).`;
+               await refreshCalendarView();
+             } catch (err) {
+               console.error(err);
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.textContent = 'Backfill failed: ' + err.message;
+             } finally {
+               backfillBtn.disabled = false;
+               backfillBtn.textContent = 'Backfill Missing Periods';
+             }
+           });
+
+           importIcsBtn.addEventListener('click', async () => {
+             if (!confirm('This will attempt to import calendar data from an ICS feed. This might include historical dates. Continue?')) return;
+             
+             importIcsBtn.disabled = true;
+             importIcsBtn.textContent = 'Importing...';
+             statusDiv.style.display = 'block';
+             statusDiv.style.background = '#eff6ff';
+             statusDiv.style.border = '1px solid #dbeafe';
+             statusDiv.style.color = '#1e40af';
+             statusDiv.innerHTML = 'Searching for ICS feeds...';
+
+             const possibleUrls = [
+               'https://www.hw.com/calendar/cycledaysUS.ics',  // The actual ICS feed
+               'https://www.hw.com/portals/0/reports/DailySchedulesUS.ics',
+               'https://www.hw.com/calendar.ics',
+               'https://www.hw.com/fs/elements/calendar.ics',
+               'https://calendar.hw.com/calendar.ics',
+               'https://www.hw.com/portals/0/calendar.ics'
+             ];
+
+             let found = null;
+
+             for (const url of possibleUrls) {
+               try {
+                 statusDiv.innerHTML += `<br>Trying: ${url}...`;
+                 const res = await fetch(url + '?t=' + Math.random());
+                 if (res.ok) {
+                   const text = await res.text();
+                   if (text.includes('BEGIN:VCALENDAR') || text.includes('BEGIN:VEVENT')) {
+                     found = { url, text };
+                     statusDiv.innerHTML += ' ✓ Found!';
+                     break;
+                   } else {
+                     statusDiv.innerHTML += ' ❌ Not ICS';
+                   }
+                 } else {
+                   statusDiv.innerHTML += ` ❌ ${res.status}`;
+                 }
+               } catch (err) {
+                 statusDiv.innerHTML += ` ❌ ${err.message}`;
+               }
+             }
+
+             if (!found) {
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.innerHTML += '<br><br><strong>❌ No ICS feed found.</strong><br>The school does not appear to publish an ICS calendar feed. Historical dates are not available via this method.';
+               importIcsBtn.disabled = false;
+               importIcsBtn.textContent = 'Import from ICS Feed';
+               return;
+             }
+
+             // Parse ICS and import
+             statusDiv.innerHTML += '<br><br>Parsing ICS data...';
+             
+             try {
+               const events = parseICS(found.text);
+               console.log('ICS Parser found events:', events.slice(0, 5)); // Log first 5 for debugging
+               statusDiv.innerHTML += `<br>Found ${events.length} events. Importing to Firestore...`;
+               
+               let saved = 0;
+               let skipped = 0;
+               let updated = 0;
+               
+               for (const evt of events) {
+                 if (!evt.date || !evt.summary) {
+                   skipped++;
+                   continue;
+                 }
+                 
+                 // Extract cycle day from summary (e.g., "US Day 3")
+                 const dayMatch = evt.summary.match(/Day\s+(\d+)/i);
+                 const cycleDay = dayMatch ? dayMatch[1] : null;
+                 
+                 if (!cycleDay) {
+                   console.log('No cycle day found in:', evt.summary);
+                   skipped++;
+                   continue;
+                 }
+                 
+                 try {
+                   // Check if already exists with periods
+                   const docRef = doc(db, 'cycleDays', evt.date);
+                   const existing = await getDoc(docRef);
+                   
+                   if (existing.exists() && existing.data().periods && existing.data().periods.length > 0) {
+                     skipped++; // Already has data, don't overwrite
+                     continue;
+                   }
+                   
+                   // Save or update (merge to preserve existing periods if any)
+                   await setDoc(docRef, {
+                     day: cycleDay,
+                     summary: evt.summary,
+                     periods: [], // ICS doesn't have period details
+                     updatedAt: serverTimestamp()
+                   }, { merge: true });
+                   
+                   if (existing.exists()) {
+                     updated++;
+                   } else {
+                     saved++;
+                   }
+                 } catch (err) {
+                   console.error(`Failed to save ${evt.date}:`, err);
+                   skipped++;
+                 }
+               }
+               
+               statusDiv.style.background = '#d1fae5';
+               statusDiv.style.border = '1px solid #6ee7b7';
+               statusDiv.style.color = '#065f46';
+               statusDiv.innerHTML += `<br><br><strong>✓ Import complete!</strong><br>New: ${saved} days<br>Updated: ${updated} days<br>Skipped: ${skipped} (already had periods or missing info)<br><br><em>Note: ICS feeds contain cycle day info but not detailed period schedules. Historical dates will show the cycle day but won't have period-by-period schedules.</em>`;
+               
+               await refreshCalendarView();
+             } catch (err) {
+               console.error(err);
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.innerHTML += `<br><br>❌ Failed to parse ICS: ${err.message}`;
+             } finally {
+               importIcsBtn.disabled = false;
+               importIcsBtn.textContent = 'Import from ICS Feed';
+             }
+           });
+
+           function parseICS(icsText) {
+             const events = [];
+             // Unfold lines (ICS files can have line continuations starting with space/tab)
+             const unfolded = icsText.replace(/\r?\n[ \t]/g, '');
+             const lines = unfolded.split(/\r?\n/);
+             let currentEvent = null;
+             
+             for (let i = 0; i < lines.length; i++) {
+               const line = lines[i].trim();
+               
+               if (line === 'BEGIN:VEVENT') {
+                 currentEvent = {};
+               } else if (line === 'END:VEVENT' && currentEvent) {
+                 if (currentEvent.dtstart && currentEvent.summary) {
+                   // Convert DTSTART to YYYY-MM-DD format
+                   // Handle both DTSTART:20250826 and DTSTART;VALUE=DATE:20250826
+                   const dateMatch = currentEvent.dtstart.match(/(\d{4})(\d{2})(\d{2})/);
+                   if (dateMatch) {
+                     currentEvent.date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+                     events.push(currentEvent);
+                   }
+                 }
+                 currentEvent = null;
+               } else if (currentEvent) {
+                 if (line.startsWith('DTSTART')) {
+                   const parts = line.split(':');
+                   const value = parts[parts.length - 1]; // Get last part after all colons
+                   currentEvent.dtstart = value;
+                 } else if (line.startsWith('SUMMARY:')) {
+                   currentEvent.summary = line.substring(8).trim();
+                 } else if (line.startsWith('DESCRIPTION:')) {
+                   currentEvent.description = line.substring(12).trim();
+                 }
+               }
+             }
+             
+             return events;
+           }
+
+          inspectBtn.addEventListener('click', async () => {
+             inspectBtn.disabled = true;
+             inspectBtn.textContent = 'Fetching...';
+             statusDiv.style.display = 'block';
+             statusDiv.style.background = '#eff6ff';
+             statusDiv.style.border = '1px solid #dbeafe';
+             statusDiv.style.color = '#1e40af';
+             statusDiv.innerHTML = 'Fetching XML...';
+
+             try {
+               const url = 'https://www.hw.com/portals/0/reports/DailySchedulesUS.xml?t=' + Math.random();
+               const res = await fetch(url);
+               const text = await res.text();
+               const xml = new window.DOMParser().parseFromString(text, 'text/xml');
+               
+               const calendarDays = Array.from(xml.getElementsByTagName('CalendarDay'));
+               const firstDay = calendarDays[0];
+               
+               if (firstDay) {
+                 const dateStr = firstDay.getElementsByTagName('Date')[0]?.textContent.trim() || 'N/A';
+                 const cycleDay = firstDay.getElementsByTagName('CycleDay')[0]?.textContent.trim() || 'N/A';
+                 const summary = firstDay.getElementsByTagName('SchoolDayDescription')[0]?.textContent.trim() || 'N/A';
+                 
+                 // Count periods in first day
+                 const periodNodes = Array.from(firstDay.getElementsByTagName('Period'));
+                 
+                 statusDiv.style.background = '#f0fdf4';
+                 statusDiv.style.border = '1px solid #86efac';
+                 statusDiv.style.color = '#166534';
+                 statusDiv.innerHTML = `
+                   <strong>XML Structure Inspection:</strong><br>
+                   Total CalendarDay elements: ${calendarDays.length}<br>
+                   First day date: ${dateStr}<br>
+                   First day cycle: ${cycleDay}<br>
+                   First day summary: ${summary}<br>
+                   First day periods found: ${periodNodes.length}<br><br>
+                   <details>
+                     <summary>First CalendarDay XML (click to expand)</summary>
+                     <pre style="font-size:11px;overflow:auto;max-height:400px;background:#fff;padding:8px;border:1px solid #ddd;border-radius:4px">${escapeHtml(new XMLSerializer().serializeToString(firstDay))}</pre>
+                   </details>
+                 `;
+               } else {
+                 statusDiv.style.background = '#fee2e2';
+                 statusDiv.style.border = '1px solid #fecaca';
+                 statusDiv.style.color = '#991b1b';
+                 statusDiv.textContent = 'No CalendarDay elements found in XML!';
+               }
+             } catch (err) {
+               console.error(err);
+               statusDiv.style.background = '#fee2e2';
+               statusDiv.style.border = '1px solid #fecaca';
+               statusDiv.style.color = '#991b1b';
+               statusDiv.textContent = 'Failed to fetch XML: ' + err.message;
+             } finally {
+               inspectBtn.disabled = false;
+               inspectBtn.textContent = 'Inspect XML Structure';
+             }
+           });
+
+           function escapeHtml(text) {
+             const div = document.createElement('div');
+             div.textContent = text;
+             return div.innerHTML;
+           }
+
+           refreshBtn.addEventListener('click', refreshCalendarView);
+           
+           // Initial load
+           await refreshCalendarView();
+         }
+
+         // ========== TAB 6: ANALYTICS ==========
+         async function loadAnalytics() {
+           const container = panels.analytics;
+           container.innerHTML = '<h2>Analytics & Reports</h2><div id="stats"></div><div style="margin-top:16px"><button id="exportCSV" class="btn primary">Export Sessions to CSV</button></div>';
+           const stats = document.getElementById('stats');
+           
+           // Compute stats
+           const [reqSnap, sessSnap, usersSnap] = await Promise.all([
+             getDocs(collection(db, 'Requests')),
+             getDocs(collection(db, 'Sessions')),
+             getDocs(collection(db, 'users'))
+           ]);
+           
+           const totalReqs = reqSnap.size;
+           const totalSess = sessSnap.size;
+           const totalUsers = usersSnap.size;
+           const bySubject = {};
+           sessSnap.forEach(d => {
+             const s = d.data() || {};
+             const subj = s.subject || 'Unknown';
+             bySubject[subj] = (bySubject[subj] || 0) + 1;
+           });
+           
+           const grid = document.createElement('div');
+           grid.className = 'stat-grid';
+           grid.innerHTML = `
+             <div class="stat-card"><div class="label">Total Tutoring Requests</div><div class="value">${totalReqs}</div></div>
+             <div class="stat-card"><div class="label">Total Sessions</div><div class="value">${totalSess}</div></div>
+             <div class="stat-card"><div class="label">Total Users</div><div class="value">${totalUsers}</div></div>
+           `;
+           Object.keys(bySubject).sort().forEach(subj => {
+             const card = document.createElement('div');
+             card.className = 'stat-card';
+             card.innerHTML = `<div class="label">${subj} Sessions</div><div class="value" style="font-size:22px">${bySubject[subj]}</div>`;
+             grid.appendChild(card);
+           });
+           stats.appendChild(grid);
+           
+           document.getElementById('exportCSV').addEventListener('click', () => {
+             const rows = [['Date','CycleDay','Block','Student','Email','Grade','Subject','Class','Topic','Location','Tutor','Status']];
+             sessSnap.forEach(d => {
+               const s = d.data() || {};
+               rows.push([
+                 s.slot?.date||'',s.slot?.cycleDay||'',s.slot?.block||'',s.name||'',s.email||'',s.grade||'',s.subject||'',s.class||'',s.topic||'',s.location||'',s.tutorName||'',s.status||''
+               ]);
+             });
+             const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+             const blob = new Blob([csv], { type: 'text/csv' });
+             const url = URL.createObjectURL(blob);
+             const a = document.createElement('a');
+             a.href = url;
+             a.download = `sessions_${new Date().toISOString().slice(0,10)}.csv`;
+             a.click();
+             URL.revokeObjectURL(url);
+           });
+         }
+
+         // Lazy-load other tabs
+         tabs.forEach(t => t.addEventListener('click', () => {
+           const tab = t.dataset.tab;
+           if (tab === 'requests' && panels.requests.innerHTML.includes('Coming soon')) loadRequests();
+           if (tab === 'sessions' && panels.sessions.innerHTML.includes('Coming soon')) loadSessions();
+           if (tab === 'hours' && panels.hours.innerHTML.includes('Coming soon')) loadHours();
+           if (tab === 'users' && panels.users.innerHTML.includes('Coming soon')) loadUsers();
+          if (tab === 'calendar' && panels.calendar.innerHTML.includes('Coming soon')) loadCalendar();
+           if (tab === 'analytics' && panels.analytics.innerHTML.includes('Coming soon')) loadAnalytics();
+         }));
+
+         // Stub other panels until clicked
+         panels.requests.innerHTML = 'Coming soon...';
+         panels.sessions.innerHTML = 'Coming soon...';
+         panels.hours.innerHTML = 'Coming soon...';
+         panels.users.innerHTML = 'Coming soon...';
+        panels.calendar.innerHTML = 'Coming soon...';
+         panels.analytics.innerHTML = 'Coming soon...';
+
+       } catch (e) {
+         navigated = true;
+         const url = new URL('board.html', window.location.href);
+         url.searchParams.set('err', 'admin_denied');
+         window.location.replace(url.toString());
+         return;
+       }
+      });
+    </script>
+  </body>
+  </html>

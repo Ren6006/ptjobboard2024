@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>User Info</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
     <style>
       body {
@@ -210,6 +211,17 @@
         color: #fff;
         border-color: #1a57d6;
       }
+      .chip.approved {
+        background: #10b981;
+        color: #fff;
+        border-color: #10b981;
+      }
+      .chip.pending::after {
+        content: " • pending";
+        margin-left: 6px;
+        font-size: 11px;
+        color: #6b7280;
+      }
       .muted {
         color: #6b7280;
         font-size: 12px;
@@ -243,9 +255,13 @@
       <div class="section">
         <h3>Classes</h3>
         <p class="muted">
-          Expand a subject and click classes to select. Click again to unselect.
+          Expand a subject and click classes to select, then request approval. Approved classes appear in green; pending requests show a badge.
         </p>
         <div id="subjectsRoot" class="subjects"></div>
+        <div class="actions" style="margin-top:12px">
+          <button id="requestClassesBtn" class="primary">Request chosen classes</button>
+          <span id="requestStatus" class="muted"></span>
+        </div>
       </div>
 
       <div class="section">
@@ -274,7 +290,7 @@
         appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
         measurementId: "G-PF9F78SKZV",
       };
-      if (!firebase.apps.length) {
+      if (!firebase.apps || !firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
       }
       const auth = firebase.auth();
@@ -521,6 +537,7 @@
               })
               .filter(Boolean);
           }
+          window.__approvedClasses = new Set(standardizedClasses);
           buildSubjects(standardizedClasses);
           buildAvailabilityGrid(data.availability || {});
         } catch (e) {
@@ -540,7 +557,7 @@
           var name = document.getElementById("name").value.trim();
           var grade = document.getElementById("grade").value;
           var selectedStandardClasses = collectSelectedClasses();
-          var classes = selectedStandardClasses.slice();
+          var classes = Array.from(window.__approvedClasses || []);
           var availability = collectAvailability();
           try {
             await db
@@ -566,6 +583,83 @@
             alert("Save failed");
           }
         });
+
+      function subjectOfClass(className) {
+        for (var s in subjectsCatalog) {
+          if (subjectsCatalog[s].indexOf(className) >= 0) return s;
+        }
+        return null;
+      }
+
+      async function createClassRequests(uid, name, email, classes) {
+        const batch = db.batch();
+        const now = new Date().toISOString();
+        classes.forEach(function (cls) {
+          var subject = subjectOfClass(cls) || "Other";
+          var ref = db.collection("ClassRequests").doc();
+          batch.set(ref, {
+            uid: uid,
+            userName: name || null,
+            userEmail: email || null,
+            subject: subject,
+            class: cls,
+            status: "pending",
+            requestedAt: now,
+          });
+        });
+        await batch.commit();
+      }
+
+      document.getElementById("requestClassesBtn").addEventListener("click", async function () {
+        var user = auth.currentUser;
+        if (!user) {
+          window.location.href = "signup.html";
+          return;
+        }
+        var name = document.getElementById("name").value.trim();
+        var selected = new Set(collectSelectedClasses());
+        var approved = window.__approvedClasses || new Set();
+        var toRequest = Array.from(selected).filter(function (c) { return !approved.has(c); });
+        if (toRequest.length === 0) {
+          document.getElementById("requestStatus").textContent = "No new classes to request.";
+          return;
+        }
+        document.getElementById("requestStatus").textContent = "Submitting requests...";
+        try {
+          await createClassRequests(user.uid, name || user.displayName || null, user.email || null, toRequest);
+          document.getElementById("requestStatus").textContent = "Requested. You will get an email when approved.";
+          var chips = subjectsRoot.querySelectorAll('.chip');
+          chips.forEach(function (chip) {
+            var cls = chip.dataset.className;
+            if (toRequest.indexOf(cls) >= 0) {
+              chip.classList.add('pending');
+            }
+          });
+        } catch (e) {
+          document.getElementById("requestStatus").textContent = "Request failed. Try again.";
+        }
+      });
+
+      auth.onAuthStateChanged(async function (user) {
+        if (!user) return;
+        try {
+          const q = await db.collection('ClassRequests').where('uid', '==', user.uid).get();
+          var pendingByClass = new Set();
+          q.forEach(function (d) {
+            var r = d.data() || {};
+            if (r.status === 'pending') pendingByClass.add(r.class);
+          });
+          var chips = subjectsRoot.querySelectorAll('.chip');
+          chips.forEach(function (chip) {
+            var cls = chip.dataset.className;
+            if ((window.__approvedClasses||new Set()).has(cls)) {
+              chip.classList.add('approved');
+            } else if (pendingByClass.has(cls)) {
+              chip.classList.add('pending');
+            }
+          });
+        } catch (e) {}
+      });
 
       document
         .getElementById("cancelBtn")
