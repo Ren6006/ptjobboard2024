@@ -64,6 +64,10 @@
         color: #b00020;
         margin-top: 10px;
       }
+      .info {
+        color: #0a7a33;
+        margin-top: 10px;
+      }
       .link {
         margin-top: 14px;
         text-align: center;
@@ -113,6 +117,10 @@
 
         <button type="submit">Sign in</button>
         <div id="error" class="error"></div>
+        <div id="info" class="info"></div>
+        <div class="link" style="margin-top:8px">
+          <a href="#" id="forgotPasswordLink">Forgot your password?</a>
+        </div>
       </form>
       <div class="link">No account? <a href="signup.html">Sign up</a></div>
     </div>
@@ -235,6 +243,35 @@
           } catch (err) {
             errorBox.textContent =
               err && err.message ? err.message : "Login failed";
+          }
+        });
+      
+      // Forgot password handler
+      document
+        .getElementById("forgotPasswordLink")
+        .addEventListener("click", async function (e) {
+          e.preventDefault();
+          const emailEl = document.getElementById("email");
+          const email = (emailEl ? emailEl.value : "").trim();
+          const errorBox = document.getElementById("error");
+          const infoBox = document.getElementById("info");
+          errorBox.textContent = "";
+          infoBox.textContent = "";
+          if (!email) {
+            errorBox.textContent = "Enter your email above to reset your password.";
+            return;
+          }
+          if (!(email.endsWith("@hwemail.com") || email.endsWith("@hw.com"))) {
+            errorBox.textContent = "Please use your @hwemail.com or @hw.com email.";
+            return;
+          }
+          try {
+            await auth.sendPasswordResetEmail(email);
+            infoBox.textContent =
+              "Password reset link sent to " + email + ". Check your inbox. Keep in mind that it may take a few minutes to arrive.";
+          } catch (err) {
+            errorBox.textContent =
+              err && err.message ? err.message : "Failed to send reset email";
           }
         });
     </script>
