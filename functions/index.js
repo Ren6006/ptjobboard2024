@@ -5,17 +5,16 @@ import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/fire
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";   // Admin init for ref.get()
-import { google } from "googleapis";
+import nodemailer from "nodemailer";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 // ---- Init Admin (once) ----
 initializeApp();
 const db = getFirestore();
 
-// ---- Secrets (recommended over raw env) ----
-const GMAIL_CLIENT_ID = defineSecret("GMAIL_CLIENT_ID");
-const GMAIL_CLIENT_SECRET = defineSecret("GMAIL_CLIENT_SECRET");
-const GMAIL_REFRESH_TOKEN = defineSecret("GMAIL_REFRESH_TOKEN");
+// ---- Secrets (SMTP credentials stored securely) ----
+const SMTP_USER = defineSecret("SMTP_USER");
+const SMTP_PASSWORD = defineSecret("SMTP_PASSWORD");
 
 // ---- Catalog (for friendly block names) ----
 const blocksCatalog = {
@@ -37,60 +36,57 @@ const blocksCatalog = {
   "OH": "Office Hours",
 };
 
-// ---- Gmail Auth ----
-async function getGmailClient() {
-  const { OAuth2 } = google.auth;
-  const clientId = GMAIL_CLIENT_ID.value() || process.env.GMAIL_CLIENT_ID || "";
-  const clientSecret = GMAIL_CLIENT_SECRET.value() || process.env.GMAIL_CLIENT_SECRET || "";
-  const refreshToken = GMAIL_REFRESH_TOKEN.value() || process.env.GMAIL_REFRESH_TOKEN || "";
+// ---- SMTP Email Configuration ----
+// Creates a nodemailer transporter for sending emails via Gmail SMTP
+function createEmailTransporter() {
+  const smtpUser = SMTP_USER.value() || process.env.SMTP_USER || "uspeertutoring@gmail.com";
+  const smtpPassword = SMTP_PASSWORD.value() || process.env.SMTP_PASSWORD || "";
   
-  console.log("OAuth Config:", {
-    clientIdLength: clientId.length,
-    clientSecretLength: clientSecret.length,
-    refreshTokenLength: refreshToken.length,
-    clientIdPrefix: clientId.substring(0, 20)
+  console.log("SMTP Config:", {
+    user: smtpUser,
+    passwordLength: smtpPassword.length
   });
   
-  const oAuth2Client = new OAuth2(
-    clientId,
-    clientSecret,
-    "https://developers.google.com/oauthplayground" // use your real redirect URI
-  );
-
-  oAuth2Client.setCredentials({
-    refresh_token: refreshToken,
+  return nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false, // Use STARTTLS
+    auth: {
+      user: smtpUser,
+      pass: smtpPassword,
+    },
   });
-
-  return google.gmail({ version: "v1", auth: oAuth2Client });
 }
 
-// ---- Helper: Build raw RFC 5322 email (CRLF + basic MIME headers) ----
-function makeEmail({ from, to, subject, text }) {
-  const lines = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
-    "",
-    text,
-  ];
-  const raw = lines.join("\r\n");
-  return Buffer.from(raw)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+// ---- Helper: Send Email via SMTP ----
+// Sends an email using the SMTP transporter
+async function sendEmail({ from, to, subject, text }) {
+  const transporter = createEmailTransporter();
+  
+  try {
+    const info = await transporter.sendMail({
+      from,
+      to,
+      subject,
+      text,
+    });
+    console.log("Email sent successfully:", info.messageId);
+    return info;
+  } catch (error) {
+    console.error("Failed to send email:", error);
+    throw error;
+  }
 }
 
 // ---- Firestore Trigger (Gen2) ----
+// Sends confirmation email when a new tutoring session is created
 export const confirmSessionEmail = onDocumentCreated(
   {
     document: "Sessions/{sessionId}",
     region: "us-central1",
     timeoutSeconds: 540,
     // memoryMiB: 256, // optional tuning
-    secrets: [GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN],
+    secrets: [SMTP_USER, SMTP_PASSWORD],
   },
   async (event) => {
     const snap = event.data;
@@ -105,8 +101,6 @@ export const confirmSessionEmail = onDocumentCreated(
       console.log("Session no longer scheduled, skipping email");
       return;
     }
-
-    const gmail = await getGmailClient();
 
     // Recipients: student, tutor, admin (one email each)
     const recipients = [data.email, data.tutorEmail, "uspeertutoring@hw.com"].filter(Boolean);
@@ -129,14 +123,10 @@ HW Peer Tutoring`;
 
     for (const to of recipients) {
       try {
-        const raw = makeEmail({ from, to, subject, text: msgBody });
-        await gmail.users.messages.send({
-          userId: "me",
-          requestBody: { raw },
-        });
+        await sendEmail({ from, to, subject, text: msgBody });
         console.log("Email sent to", to);
       } catch (err) {
-        console.error("Error sending email to", to, err?.response?.data || err);
+        console.error("Error sending email to", to, err);
       }
     }
   }
@@ -167,12 +157,13 @@ async function grantApprovedClass({ uid, className }) {
 }
 
 // Auto-approve if requester is a lead of the subject (or Head)
+// Sends email notification when class request is created
 export const onClassRequestCreated = onDocumentCreated(
   {
     document: "ClassRequests/{requestId}",
     region: "us-central1",
     timeoutSeconds: 540,
-    secrets: [GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN],
+    secrets: [SMTP_USER, SMTP_PASSWORD],
   },
   async (event) => {
     const snap = event.data;
@@ -206,22 +197,19 @@ export const onClassRequestCreated = onDocumentCreated(
         await grantApprovedClass({ uid, className });
 
         try {
-          const gmail = await getGmailClient();
           const toList = [request.userEmail, "uspeertutoring@hw.com"].filter(Boolean);
           const subject = `Class Request Approved: ${className}`;
           const text = buildApprovalEmail({ userName: request.userName, subjectName, className });
           const from = `"HW Peer Tutoring" <uspeertutoring@gmail.com>`;
           for (const to of toList) {
-            const raw = makeEmail({ from, to, subject, text });
-            await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+            await sendEmail({ from, to, subject, text });
           }
         } catch (err) {
-          console.error("Email send failed for auto-approval", err?.response?.data || err);
+          console.error("Email send failed for auto-approval", err);
         }
       } else {
         // Not auto-approved - send notification to subject lead and admin
         try {
-          const gmail = await getGmailClient();
           const subject = `New Class Request Pending: ${className} (${subjectName})`;
           const text = `Hello,
 
@@ -254,12 +242,11 @@ HW Peer Tutoring`;
           
           // Send notification emails
           for (const to of toList) {
-            const raw = makeEmail({ from, to, subject, text });
-            await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+            await sendEmail({ from, to, subject, text });
             console.log("Class request notification sent to", to);
           }
         } catch (err) {
-          console.error("Email send failed for class request notification", err?.response?.data || err);
+          console.error("Email send failed for class request notification", err);
         }
       }
     } catch (err) {
@@ -274,7 +261,7 @@ export const onClassRequestApproved = onDocumentUpdated(
     document: "ClassRequests/{requestId}",
     region: "us-central1",
     timeoutSeconds: 540,
-    secrets: [GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN],
+    secrets: [SMTP_USER, SMTP_PASSWORD],
   },
   async (event) => {
     const before = event.data?.before;
@@ -294,17 +281,15 @@ export const onClassRequestApproved = onDocumentUpdated(
       await grantApprovedClass({ uid, className });
 
       try {
-        const gmail = await getGmailClient();
         const toList = [curr.userEmail, "uspeertutoring@hw.com"].filter(Boolean);
         const subject = `Class Request Approved: ${className}`;
         const text = buildApprovalEmail({ userName: curr.userName, subjectName, className });
         const from = `"HW Peer Tutoring" <uspeertutoring@gmail.com>`;
         for (const to of toList) {
-          const raw = makeEmail({ from, to, subject, text });
-          await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+          await sendEmail({ from, to, subject, text });
         }
       } catch (err) {
-        console.error("Email send failed on approval", err?.response?.data || err);
+        console.error("Email send failed on approval", err);
       }
     } catch (err) {
       console.error("Failed to grant approved class", err);
