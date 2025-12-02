@@ -39,8 +39,8 @@ const blocksCatalog = {
 // ---- SMTP Email Configuration ----
 // Creates a nodemailer transporter for sending emails via Gmail SMTP
 function createEmailTransporter() {
-  const smtpUser = SMTP_USER.value() || process.env.SMTP_USER || "uspeertutoring@gmail.com";
-  const smtpPassword = SMTP_PASSWORD.value() || process.env.SMTP_PASSWORD || "";
+  const smtpUser = (SMTP_USER.value() || process.env.SMTP_USER || "uspeertutoring@gmail.com").trim();
+  const smtpPassword = (SMTP_PASSWORD.value() || process.env.SMTP_PASSWORD || "").trim();
   
   console.log("SMTP Config:", {
     user: smtpUser,
@@ -133,7 +133,7 @@ HW Peer Tutoring`;
 );
 
 // ---- Helpers for Class Requests ----
-function buildApprovalEmail({ userName, subjectName, className }) {
+/* function buildApprovalEmail({ userName, subjectName, className }) {
   const name = userName || "student";
   return `Hello ${name},
 
@@ -146,7 +146,7 @@ You can now be matched for this class on the board.
 
 Thank you,
 HW Peer Tutoring`;
-}
+} */
 
 async function grantApprovedClass({ uid, className }) {
   if (!uid || !className) return;
@@ -346,6 +346,131 @@ export const onSessionCompleted = onDocumentUpdated(
   }
 );
 
+// Sends email to matching tutors when a tutoring request is created
+// Finds tutors who can teach the subject and have availability during requested times
+export const onTutoringRequestCreated = onDocumentCreated(
+  {
+    document: "Requests/{requestId}",
+    region: "us-central1",
+    timeoutSeconds: 540,
+    secrets: [SMTP_USER, SMTP_PASSWORD],
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const request = snap.data() || {};
+    const { name, email, subject, class: className, topic, location, grade, availability } = request;
+
+    if (!subject || !availability || !Array.isArray(availability) || availability.length === 0) {
+      console.log("Request missing subject or availability, skipping email");
+      return;
+    }
+
+    try {
+      // Find all users who can teach this subject (have the class approved)
+      // Query all users who have this class in their approved classes array
+      const tutorsSnap = await db.collection("users")
+        .where("classes", "array-contains", className)
+        .get();
+      
+      if (tutorsSnap.empty) {
+        console.log(`No users found with ${className} in their approved classes`);
+        return;
+      }
+
+      // For each tutor, check if they:
+      // 1. Have the class/subject approved
+      // 2. Have availability on at least one of the requested time slots
+      const matchingTutors = new Map(); // tutorEmail -> {tutorName, tutorUid, tutorEmail, availableSlots}
+
+      for (const tutorDoc of tutorsSnap.docs) {
+        const tutorData = tutorDoc.data() || {};
+        const tutorEmail = tutorData.email;
+        const tutorName = tutorData.name || tutorData.displayName || "Tutor";
+        const tutorUid = tutorDoc.id;
+
+        if (!tutorEmail) continue;
+
+        // Check availability (stored as 'availability' map field on user doc: "Day_Block" -> boolean)
+        const tutorAvailability = tutorData.availability || {};
+        
+        // Find which requested slots this tutor can cover
+        const availableSlots = [];
+        for (const slot of availability) {
+          // slot = { date: "MM/DD/YYYY", block: "BlockCode", cycleDay: "1".."6" }
+          if (!slot.cycleDay || !slot.block) continue;
+          
+          // Key format in user availability map: "Day_Block" (e.g. "1_A", "3_FC")
+          const key = `${slot.cycleDay}_${slot.block}`;
+          
+          if (tutorAvailability[key] === true) {
+            availableSlots.push(slot);
+          }
+        }
+
+        // If tutor can cover at least one slot, add them to matching tutors
+        if (availableSlots.length > 0) {
+          matchingTutors.set(tutorEmail, {
+            tutorName,
+            tutorUid,
+            tutorEmail,
+            availableSlots
+          });
+        }
+      }
+
+      // Send emails to all matching tutors (one email per tutor with all their available slots)
+      if (matchingTutors.size > 0) {
+        console.log(`Found ${matchingTutors.size} matching tutor(s)`);
+        const from = `"HW Peer Tutoring" <uspeertutoring@gmail.com>`;
+
+        for (const [, tutorInfo] of matchingTutors) {
+          try {
+            const slotList = tutorInfo.availableSlots
+              .map(s => `  • ${s.date} - ${blocksCatalog[s.block] || s.block}`)
+              .join("\n");
+
+            const emailSubject = `📌 New Tutoring Request: ${className} (${subject})`;
+            const text = `Hello ${tutorInfo.tutorName},
+
+A student is looking for tutoring help and you might be a great fit!
+
+📚 Class: ${className}
+🎯 Subject: ${subject}
+💬 Topic: ${topic || "Not specified"}
+👤 Student: ${name}
+📧 Email: ${email}
+📍 Location: ${location || "Learning Center"}
+🎓 Grade: ${grade || "Not specified"}
+
+✅ You are available during these requested times:
+${slotList}
+
+To accept this request, log in to the board and look for this request to schedule a session.
+
+Thank you,
+HW Peer Tutoring`;
+
+            await sendEmail({
+              from,
+              to: tutorInfo.tutorEmail,
+              subject: emailSubject,
+              text
+            });
+            console.log(`Email sent to tutor ${tutorInfo.tutorName} (${tutorInfo.tutorEmail})`);
+          } catch (err) {
+            console.error(`Failed to send email to tutor ${tutorInfo.tutorEmail}`, err);
+          }
+        }
+      } else {
+        console.log("No tutors found who can teach this class and are available at the requested times");
+      }
+    } catch (err) {
+      console.error("onTutoringRequestCreated error", err);
+    }
+  }
+);
+
 // Scheduled function to auto-complete sessions after their date has passed
 // Runs daily at 2 AM (US Central Time)
 export const autoCompletePassedSessions = onSchedule(
@@ -413,6 +538,70 @@ export const autoCompletePassedSessions = onSchedule(
       }
     } catch (err) {
       console.error("Error in autoCompletePassedSessions:", err);
+    }
+  }
+);
+
+// Notify student when a session is cancelled
+export const onSessionCancelled = onDocumentUpdated(
+  {
+    document: "Sessions/{sessionId}",
+    region: "us-central1",
+    timeoutSeconds: 540,
+    secrets: [SMTP_USER, SMTP_PASSWORD],
+  },
+  async (event) => {
+    const before = event.data?.before;
+    const after = event.data?.after;
+    if (!before || !after) return;
+
+    const prev = before.data() || {};
+    const curr = after.data() || {};
+
+    // Only proceed if status changed TO "cancelled"
+    if (prev.status === "cancelled" || curr.status !== "cancelled") return;
+
+    const studentEmail = curr.email;
+    const studentName = curr.name || "Student";
+    const tutorName = curr.tutorName || "Tutor";
+    
+    // Use safe access for slot details
+    const sessionDate = curr.slot?.date || "TBD";
+    const sessionBlock = blocksCatalog[curr.slot?.block] || curr.slot?.block || "TBD";
+    const className = curr.class || curr.subject || "Tutoring";
+
+    if (!studentEmail) {
+      console.log("No student email found for cancelled session");
+      return;
+    }
+
+    const subject = `❌ Session Cancelled: ${className} on ${sessionDate}`;
+    const text = `Hello ${studentName},
+
+Your tutoring session has been cancelled.
+
+📅 Date: ${sessionDate}
+🕒 Block: ${sessionBlock}
+📖 Class: ${className}
+👤 Tutor: ${tutorName}
+
+If you still need help, please submit a new request on the board.
+
+Thank you,
+HW Peer Tutoring`;
+
+    const from = `"HW Peer Tutoring" <uspeertutoring@gmail.com>`;
+    
+    // Send to student and admin
+    const recipients = [studentEmail, "uspeertutoring@hw.com"];
+
+    for (const to of recipients) {
+      try {
+        await sendEmail({ from, to, subject, text });
+        console.log(`Cancellation email sent to ${to}`);
+      } catch (err) {
+        console.error(`Failed to send cancellation email to ${to}`, err);
+      }
     }
   }
 );
