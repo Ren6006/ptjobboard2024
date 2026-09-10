@@ -436,29 +436,39 @@
       const classSelect = document.getElementById("class");
       const options = {
         math: [
-          "Geometry",
-          "Advanced Geometry",
-          "Honors Geometry",
           "Algebra II",
           "Advanced Algebra II",
           "Honors Algebra II",
           "Precalculus",
           "Advanced Precalculus",
           "Honors Precalculus",
-          "AP Calculus AB",
-          "AP Calculus BC",
+          "Calculus I",
+          "Honors Calculus I",
+          "Honors Calculus I & II",
+          "Honors Calculus II",
+          "Calc & Stats",
           "Linear Algebra",
+          "Multivariable Calculus",
           "Other",
         ],
         science: [
           "Chemistry",
-          "Honors Chemistry",
-          "AP Chemistry",
+          "Honors Chemistry I",
+          "Human Anatomy & Physiology",
+          "Genetics and Biotechnology",
+          "Honors Molecular & Cellular Biology",
+          "Honors Evolution & Ecology",
+          "Astronomy",
+          "Oceanography and Marine Biology",
+          "Honors Geology",
           "Physics I",
           "Honors Physics I",
-          "AP Physics C: Mechanics",
-          "AP Physics C: Electricity & Magnetism",
-          "AP Environmental Sciences",
+          "Honors Chemistry II",
+          "Honors Organic Chemistry",
+          "Honors Environmental Science",
+          "Honors Physics II",
+          "Honors Physics C: Mechanics",
+          "Honors Physics C: Electricity & Magnetism",
           "Other",
         ],
         history: [
@@ -470,26 +480,38 @@
         ],
         english: ["English II", "English III", "Honors English III", "Other"],
         "world language": [
-          "Spanish II",
-          "Honors Spanish II",
-          "Spanish III",
-          "Honors Spanish III",
-          "Spanish IV",
-          "AP Spanish",
-          "French II",
-          "Honors French II",
-          "French III",
-          "Honors French III",
-          "French IV",
           "Latin II",
           "Latin III",
-          "Honors Latin III",
+          "Honors III",
+          "Advanced Latin III",
           "Latin IV",
-          "AP Latin",
+          "Honors Latin Lit I",
+          "Honors Latin Lit II",
           "Chinese II",
           "Chinese III",
-          "Honors Chinese III",
+          "Honors III",
+          "Advanced Chinese III",
           "Chinese IV",
+          "Chinese V",
+          "Honors Chinese Lang & Culture",
+          "Honors Chinese Lit & Arts",
+          "French II",
+          "French III",
+          "Honors III",
+          "Advanced French III",
+          "French IV",
+          "French V: Contemporary Culture and Communication",
+          "Honors French Lang & Culture",
+          "Honors French Lit & Arts",
+          "Spanish II",
+          "Spanish III",
+          "Honors III",
+          "Advanced Spanish III",
+          "Spanish IV",
+          "Spanish V: Interdisciplinary Spanish Studies",
+          "Honors Spanish Lang & Culture",
+          "Honors Spanish Lit & Arts",
+          "Honors Spanish Seminar: History of Spain and Latin America",
           "Other",
         ],
         "computer science": [
@@ -597,7 +619,7 @@
       // ===== Schedule loader (Upper School by default) =====
       const CAMPUS = "US";
       let xmlCache = null;
-      
+
       async function fetchXml() {
         if (xmlCache) return xmlCache;
         const url = `https://www.hw.com/portals/0/reports/DailySchedules${CAMPUS}.xml?t=${Math.random()}`;
@@ -628,13 +650,13 @@
           // Try Firestore first
           const docRef = db.collection("cycleDays").doc(dateYYYYMMDD);
           const docSnap = await docRef.get();
-          
+
           if (docSnap.exists) {
             const data = docSnap.data();
             return {
               cycleDay: data.day || "",
               summary: data.summary || "",
-              periods: data.periods || []
+              periods: data.periods || [],
             };
           }
         } catch (err) {
@@ -645,24 +667,34 @@
         const xml = await fetchXml();
         const targetMMDDYYYY = toMMDDYYYY(dateYYYYMMDD);
         const days = Array.from(xml.getElementsByTagName("CalendarDay"));
-        const match = days.find((d) => 
-          (d.getElementsByTagName("Date")[0]?.textContent || "").trim() === targetMMDDYYYY
+        const match = days.find(
+          (d) =>
+            (d.getElementsByTagName("Date")[0]?.textContent || "").trim() ===
+            targetMMDDYYYY
         );
 
         if (!match) {
           return null; // No data found
         }
 
-        const cycleDay = (match.getElementsByTagName("CycleDay")[0]?.textContent || "").trim();
-        const summary = (match.getElementsByTagName("SchoolDayDescription")[0]?.textContent || "").trim();
-        
+        const cycleDay = (
+          match.getElementsByTagName("CycleDay")[0]?.textContent || ""
+        ).trim();
+        const summary = (
+          match.getElementsByTagName("SchoolDayDescription")[0]?.textContent ||
+          ""
+        ).trim();
+
         // Extract periods
         const periods = [];
         const periodNodes = Array.from(match.getElementsByTagName("Period"));
         periodNodes.forEach((p) => {
-          const code = p.getElementsByTagName("PeriodCode")[0]?.textContent.trim() || "";
-          const start = p.getElementsByTagName("StartTime")[0]?.textContent.trim() || "";
-          const end = p.getElementsByTagName("EndTime")[0]?.textContent.trim() || "";
+          const code =
+            p.getElementsByTagName("PeriodCode")[0]?.textContent.trim() || "";
+          const start =
+            p.getElementsByTagName("StartTime")[0]?.textContent.trim() || "";
+          const end =
+            p.getElementsByTagName("EndTime")[0]?.textContent.trim() || "";
           if (code) {
             periods.push({ code, start, end });
           }
@@ -670,12 +702,15 @@
 
         // Save to Firestore for future use
         try {
-          await db.collection("cycleDays").doc(dateYYYYMMDD).set({
-            day: cycleDay || null,
-            summary: summary || null,
-            periods: periods,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
+          await db
+            .collection("cycleDays")
+            .doc(dateYYYYMMDD)
+            .set({
+              day: cycleDay || null,
+              summary: summary || null,
+              periods: periods,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            });
         } catch (err) {
           console.warn("Failed to save to Firestore:", err);
         }
@@ -693,41 +728,46 @@
 
       function buildScheduleTable(dayDataOrNode) {
         let periods = [];
-        
+
         // Handle both new format (from Firestore) and old format (XML node)
         if (dayDataOrNode.periods && Array.isArray(dayDataOrNode.periods)) {
           // New format from Firestore
           periods = dayDataOrNode.periods;
         } else if (dayDataOrNode.getElementsByTagName) {
           // Old XML node format
-          const periodNodes = Array.from(dayDataOrNode.getElementsByTagName("Period"));
+          const periodNodes = Array.from(
+            dayDataOrNode.getElementsByTagName("Period")
+          );
           periodNodes.forEach((p) => {
-            const code = p.getElementsByTagName("PeriodCode")[0]?.textContent.trim() || "";
-            const start = p.getElementsByTagName("StartTime")[0]?.textContent.trim() || "";
-            const end = p.getElementsByTagName("EndTime")[0]?.textContent.trim() || "";
+            const code =
+              p.getElementsByTagName("PeriodCode")[0]?.textContent.trim() || "";
+            const start =
+              p.getElementsByTagName("StartTime")[0]?.textContent.trim() || "";
+            const end =
+              p.getElementsByTagName("EndTime")[0]?.textContent.trim() || "";
             if (code) periods.push({ code, start, end });
           });
         }
-        
+
         if (!periods.length) {
           scheduleWrap.innerHTML =
             '<div class="empty">No schedule for this day.</div>';
           return;
         }
-        
+
         const table = document.createElement("table");
         periods.forEach((p) => {
           const code = p.code;
           const start = twelveHr(extractTime(p.start));
           const end = twelveHr(extractTime(p.end));
-          
+
           if (code in blocksCatalog) {
             const tr = document.createElement("tr");
             tr.innerHTML = `<td class="code">${code}</td><td class="time">${start} – ${end}</td><td class="pick"><button class="btn" data-code="${code}">Add</button></td>`;
             table.appendChild(tr);
           }
         });
-        
+
         scheduleWrap.innerHTML = "";
         scheduleWrap.appendChild(table);
         scheduleWrap.querySelectorAll("button[data-code]").forEach((btn) => {
@@ -765,7 +805,8 @@
         }
 
         selectedCycleDay = data.cycleDay;
-        dayLabel.textContent = data.summary || (data.cycleDay ? `Day ${data.cycleDay}` : "");
+        dayLabel.textContent =
+          data.summary || (data.cycleDay ? `Day ${data.cycleDay}` : "");
 
         buildScheduleTable(data);
       });
@@ -833,7 +874,9 @@
             console.error("Error code:", err.code);
             console.error("Error message:", err.message);
             alert(
-              "An error occurred while submitting your request: " + err.message + "\n\nPlease check the browser console for details and try again."
+              "An error occurred while submitting your request: " +
+                err.message +
+                "\n\nPlease check the browser console for details and try again."
             );
           }
         });
