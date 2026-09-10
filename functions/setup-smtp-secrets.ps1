@@ -1,18 +1,22 @@
 # PowerShell script to set up Firebase SMTP secrets
-# This script configures the required secrets for email functionality
+# Prompts for the Gmail app password so it is never stored in this repo.
 
 Write-Host "Setting up Firebase SMTP Secrets..." -ForegroundColor Green
 Write-Host ""
 
-# SMTP credentials
-$SMTP_USER = "uspeertutoring@gmail.com"
-$SMTP_PASSWORD = "teiy zvdm uplv ddnv"
+$SMTP_USER = Read-Host "SMTP user (Gmail address) [uspeertutoring@gmail.com]"
+if ([string]::IsNullOrWhiteSpace($SMTP_USER)) { $SMTP_USER = "uspeertutoring@gmail.com" }
 
-# Create temporary files for secrets
+$secure = Read-Host "Gmail app password (16 chars, spaces ok)" -AsSecureString
+$SMTP_PASSWORD = [System.Net.NetworkCredential]::new("", $secure).Password
+if ([string]::IsNullOrWhiteSpace($SMTP_PASSWORD)) {
+    Write-Host "No password entered. Aborting." -ForegroundColor Red
+    exit 1
+}
+
+# Create temporary files for secrets (no trailing newline)
 $tempUserFile = [System.IO.Path]::GetTempFileName()
 $tempPasswordFile = [System.IO.Path]::GetTempFileName()
-
-# Write secrets to temp files (no newline)
 [System.IO.File]::WriteAllText($tempUserFile, $SMTP_USER)
 [System.IO.File]::WriteAllText($tempPasswordFile, $SMTP_PASSWORD)
 
@@ -24,15 +28,10 @@ try {
     firebase functions:secrets:set SMTP_PASSWORD --data-file $tempPasswordFile
 
     Write-Host ""
-    Write-Host "✅ SMTP secrets configured successfully!" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "1. Deploy your functions: firebase deploy --only functions" -ForegroundColor White
-    Write-Host "2. The email system will now use SMTP instead of OAuth" -ForegroundColor White
+    Write-Host "SMTP secrets configured." -ForegroundColor Green
+    Write-Host "Next: firebase deploy --only functions" -ForegroundColor Cyan
 }
 finally {
-    # Clean up temp files
     Remove-Item -Path $tempUserFile -ErrorAction SilentlyContinue
     Remove-Item -Path $tempPasswordFile -ErrorAction SilentlyContinue
 }
-

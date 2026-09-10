@@ -19,41 +19,52 @@ service cloud.firestore {
     }
 
     function isAdminTier() {
-      return isSignedIn() && (myRole() in ['Admin', 'Head', 'Developer']);
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (myRole() in ['Admin', 'Head', 'Developer']);
     }
 
     function isLeadForSubject(subject) {
-      return isSignedIn() && (myRole() == subject + ' Lead');
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (myRole() == subject + ' Lead');
     }
 
-    // users documents
+    function isSchoolEmail(email) {
+      return email is string
+        && email.size() <= 254
+        && email.lower().matches('.*@(hwemail|hw)\\.com');
+    }
+
+    // --- users/{uid} -------------------------------------------------------
+    // Only admins may set `role` or `classes`. A user creating/updating their
+    // own doc may leave them absent, keep them unchanged, or (on first write)
+    // set role to the default "student" / classes to an empty list.
+    function selfRoleOk() {
+      return !('role' in request.resource.data)
+        || request.resource.data.role == 'student'
+        || (resource != null && 'role' in resource.data
+            && request.resource.data.role == resource.data.role);
+    }
+
+    function selfClassesOk() {
+      return !('classes' in request.resource.data)
+        || (request.resource.data.classes is list && request.resource.data.classes.size() == 0)
+        || (resource != null && 'classes' in resource.data
+            && request.resource.data.classes == resource.data.classes);
+    }
+
     match /users/{uid} {
-      // Users can read their own doc, admins can read all (but check resource exists to avoid errors)
-      allow read: if isSelf(uid) || (
-        isSignedIn() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin','Head','Developer']
-      );
+      allow read: if isSelf(uid) || isAdminTier();
 
-      // Owners can create their own document
-      allow create: if isSelf(uid);
-      
-      // Owners can update their profile basics only; classes and role are restricted
-      // Allow update if document exists and fields are preserved
-      allow update: if isSelf(uid) && (
-        // If document doesn't exist yet (resource is null), allow creating it
-        (resource == null) ||
-        // If document doesn't have role/classes yet, allow setting them
-        (!resource.data.keys().hasAll(['role', 'classes'])) ||
-        // Otherwise require they stay the same
-        (request.resource.data.role == resource.data.role &&
-         request.resource.data.classes == resource.data.classes)
-      );
+      allow create: if isSelf(uid) && selfRoleOk() && selfClassesOk();
+      allow update: if isSelf(uid) && selfRoleOk() && selfClassesOk();
 
-      // Elevated can write (e.g., admins/tools)
+      // Elevated can write anything (admin console, tools)
       allow write: if isAdminTier();
     }
 
+    // --- ClassRequests/{requestId} ----------------------------------------
     // Tutor class approval requests
     match /ClassRequests/{requestId} {
       allow read: if isSignedIn() && (
@@ -62,42 +73,54 @@ service cloud.firestore {
         isLeadForSubject(resource.data.subject)
       );
 
-      // Create by owner only; uid is immutable after create
+      // Create by owner only, always pending
       allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid;
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.subject is string
+        && request.resource.data.class is string;
 
-      // Status moderation by admin tier or subject lead for that subject
+      // Status moderation by admin tier or the lead for that subject
       allow update: if isSignedIn() && (
         isAdminTier() ||
         isLeadForSubject(resource.data.subject)
       );
 
-      // Prevent deletes by non-admins
       allow delete: if isAdminTier();
     }
 
-    // Student Requests and Sessions (baseline: authenticated read, guarded writes)
+    // --- Requests/{docId} (student tutoring requests) ----------------------
+    // Students do not have accounts, so anyone may create a request, but it
+    // must look like a real request. Signed-in tutors may update/delete
+    // (finalize, cancel & reopen).
     match /Requests/{docId} {
       allow read: if isSignedIn();
-      // Allow anyone to create requests (students don't need accounts)
-      // But require auth for update/delete (only tutors should modify)
-      allow create: if true;
+      allow create: if isSchoolEmail(request.resource.data.email)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.subject is string
+        && request.resource.data.class is string
+        && request.resource.data.availability is list
+        && request.resource.data.availability.size() > 0
+        && request.resource.data.availability.size() <= 50
+        && (!('topic' in request.resource.data) || request.resource.data.topic == null || request.resource.data.topic.size() <= 500)
+        && (!('info' in request.resource.data) || request.resource.data.info == null || request.resource.data.info.size() <= 1000)
+        && (!('location' in request.resource.data) || request.resource.data.location == null || request.resource.data.location.size() <= 200);
       allow update: if isSignedIn();
       allow delete: if isSignedIn();
     }
 
+    // --- Sessions/{sessionId} ---------------------------------------------
     match /Sessions/{sessionId} {
       allow read: if isSignedIn();
-      // Allow create/update/delete by signed-in (tutor finalize/cancel flows)
       allow create: if isSignedIn();
       allow update: if isSignedIn();
       allow delete: if isSignedIn();
     }
 
-    // Hours tracking
+    // --- Hours/{hourId} ----------------------------------------------------
     match /Hours/{hourId} {
       allow read: if isSignedIn();
-      // Users can create hours for themselves; admins can create/edit/delete all
       allow create: if isSignedIn() && request.resource.data.tutorUid == request.auth.uid;
       allow update, delete: if isSignedIn() && (
         resource.data.tutorUid == request.auth.uid ||
@@ -105,13 +128,14 @@ service cloud.firestore {
       );
     }
 
-    // Cycle calendar days - read by all signed in, write by admins only
+    // --- cycleDays/{dateId} (cached school calendar) -----------------------
+    // Read by anyone (the public request form needs it); written by admins.
     match /cycleDays/{dateId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdminTier();
     }
 
-    // Fallback block nothing else
+    // Deny everything else
     match /{document=**} {
       allow read: if false;
       allow write: if false;

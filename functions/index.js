@@ -3,8 +3,10 @@
 // ---- Imports (ESM at top) ----
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";   // Admin init for ref.get()
+import { getAuth } from "firebase-admin/auth";
 import nodemailer from "nodemailer";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
@@ -133,7 +135,7 @@ HW Peer Tutoring`;
 );
 
 // ---- Helpers for Class Requests ----
-/* function buildApprovalEmail({ userName, subjectName, className }) {
+function buildApprovalEmail({ userName, subjectName, className }) {
   const name = userName || "student";
   return `Hello ${name},
 
@@ -146,7 +148,7 @@ You can now be matched for this class on the board.
 
 Thank you,
 HW Peer Tutoring`;
-} */
+}
 
 async function grantApprovedClass({ uid, className }) {
   if (!uid || !className) return;
@@ -318,8 +320,8 @@ export const onSessionCompleted = onDocumentUpdated(
     const tutorName = curr.tutorName;
     const slot = curr.slot || {};
     
-    if (!tutorUid || !slot.date || !slot.cycleDay || !slot.block) {
-      console.error("Missing required fields for hour tracking");
+    if (!tutorUid || !slot.date || !slot.block) {
+      console.error("Missing required fields for hour tracking", { tutorUid, slot });
       return;
     }
 
@@ -330,7 +332,7 @@ export const onSessionCompleted = onDocumentUpdated(
         tutorName: tutorName || null,
         tutorEmail: curr.tutorEmail || null,
         date: slot.date,
-        cycleDay: slot.cycleDay,
+        cycleDay: slot.cycleDay || null,
         block: slot.block,
         subject: curr.subject || null,
         class: curr.class || null,
@@ -389,7 +391,7 @@ export const onTutoringRequestCreated = onDocumentCreated(
         const tutorName = tutorData.name || tutorData.displayName || "Tutor";
         const tutorUid = tutorDoc.id;
 
-        if (!tutorEmail) continue;
+        if (!tutorEmail || tutorData.deleted) continue;
 
         // Check availability (stored as 'availability' map field on user doc: "Day_Block" -> boolean)
         const tutorAvailability = tutorData.availability || {};
@@ -603,5 +605,89 @@ HW Peer Tutoring`;
         console.error(`Failed to send cancellation email to ${to}`, err);
       }
     }
+  }
+);
+
+// ---- Admin user management (callable from admin.html) ----
+const ADMIN_ROLES = new Set(["Admin", "Head", "Developer"]);
+const ALLOWED_EMAIL_RE = /@(hwemail|hw)\.com$/i;
+
+async function requireAdmin(request) {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
+  const snap = await db.collection("users").doc(uid).get();
+  const role = snap.exists ? snap.data()?.role : null;
+  if (!ADMIN_ROLES.has(role)) {
+    throw new HttpsError("permission-denied", "Admin access required.");
+  }
+  return { uid, role };
+}
+
+// Create a Firebase Auth account plus its users/{uid} profile
+export const adminCreateUser = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const caller = await requireAdmin(request);
+    const name = String(request.data?.name || "").trim();
+    const email = String(request.data?.email || "").trim().toLowerCase();
+    const password = String(request.data?.password || "");
+    const role = String(request.data?.role || "student");
+
+    if (!name) throw new HttpsError("invalid-argument", "Name is required.");
+    if (!ALLOWED_EMAIL_RE.test(email)) {
+      throw new HttpsError("invalid-argument", "Email must end with @hwemail.com or @hw.com.");
+    }
+    if (password.length < 6) {
+      throw new HttpsError("invalid-argument", "Password must be at least 6 characters.");
+    }
+
+    let userRecord;
+    try {
+      userRecord = await getAuth().createUser({ email, password, displayName: name });
+    } catch (err) {
+      if (err?.code === "auth/email-already-exists") {
+        throw new HttpsError("already-exists", "An account with that email already exists.");
+      }
+      console.error("createUser failed", err);
+      throw new HttpsError("internal", err?.message || "Failed to create user.");
+    }
+
+    await db.collection("users").doc(userRecord.uid).set(
+      {
+        name,
+        email,
+        role,
+        created_at: FieldValue.serverTimestamp(),
+        createdBy: caller.uid,
+      },
+      { merge: true }
+    );
+
+    return { uid: userRecord.uid };
+  }
+);
+
+// Permanently delete a Firebase Auth account and its users/{uid} profile
+export const adminDeleteUser = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const caller = await requireAdmin(request);
+    const uid = String(request.data?.uid || "").trim();
+    if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
+    if (uid === caller.uid) {
+      throw new HttpsError("failed-precondition", "You cannot delete your own account.");
+    }
+
+    try {
+      await getAuth().deleteUser(uid);
+    } catch (err) {
+      // If the auth account is already gone, still clean up the profile
+      if (err?.code !== "auth/user-not-found") {
+        console.error("deleteUser failed", err);
+        throw new HttpsError("internal", err?.message || "Failed to delete auth account.");
+      }
+    }
+    await db.collection("users").doc(uid).delete();
+    return { ok: true };
   }
 );

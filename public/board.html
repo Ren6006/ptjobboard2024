@@ -7,6 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
     <script src="firebase-config.js"></script>
+    <script src="catalog.js"></script>
     <style>
       :root {
         --bg: #f7f7fb;
@@ -361,25 +362,20 @@
       const leadOpenLoadingEl = document.getElementById("lead-open-loading");
       const leadCompletedEl = document.getElementById("lead-completed");
       const leadCompletedLoadingEl = document.getElementById("lead-completed-loading");
+      const hoursEl = document.getElementById("hours");
+      const hoursLoadingEl = document.getElementById("hours-loading");
 
-      const blocksCatalog = {
-        1: "Block 1",
-        M11: "Junior Seminar",
-        2: "Block 2",
-        L: "Lunch",
-        3: "Block 3",
-        DS: "DS",
-        CC: "CC (3:15-4:00)",
-        4: "Block 4",
-        M10: "Soph. Seminar",
-        5: "Block 5",
-        6: "Block 6",
-        7: "Block 7",
-        FC: "Faculty Collaboration",
-        M12: "Senior Seminar",
-        CT: "Community Time",
-        OH: "Office Hours",
-      };
+      const blocksCatalog = window.__CATALOG__.blocks;
+
+      // Escape user-provided text before putting it into innerHTML.
+      // Requests are submitted by anonymous students, so never trust them.
+      const esc = (v) =>
+        String(v ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
 
       const fmtDate = (raw) => {
         try {
@@ -457,24 +453,24 @@
         const left = document.createElement("div");
         left.className = "req-col grow";
         left.innerHTML = `
-        <h3>${data.name || "No Name"} <span class="pill">${
+        <h3>${esc(data.name || "No Name")} <span class="pill">${esc(
           data.subject || "—"
-        }</span> <span class="pill">${data.class || "—"}</span></h3>
-        <div class="kv"><span class="k">Email</span><span>${
+        )}</span> <span class="pill">${esc(data.class || "—")}</span></h3>
+        <div class="kv"><span class="k">Email</span><span>${esc(
           data.email || "N/A"
-        }</span></div>
-        <div class="kv"><span class="k">Grade</span><span>${
+        )}</span></div>
+        <div class="kv"><span class="k">Grade</span><span>${esc(
           data.grade || "N/A"
-        }</span></div>
-        <div class="kv"><span class="k">Topic</span><span>${
+        )}</span></div>
+        <div class="kv"><span class="k">Topic</span><span>${esc(
           data.topic || "N/A"
-        }</span></div>
-        <div class="kv"><span class="k">Location</span><span>${
+        )}</span></div>
+        <div class="kv"><span class="k">Location</span><span>${esc(
           data.location || "N/A"
-        }</span></div>
-        <div class="kv"><span class="k">Info</span><span>${
+        )}</span></div>
+        <div class="kv"><span class="k">Info</span><span>${esc(
           data.info || "—"
-        }</span></div>
+        )}</span></div>
       `;
 
         const right = document.createElement("div");
@@ -569,7 +565,7 @@
 
       // --- Sessions renderer (uses same banner layout for consistency) ---
       const renderSession = (s, opts = {}) => {
-        const { showCancel = false, showComplete = false, currentUser = null } = opts;
+        const { showCancel = false } = opts;
         const wrap = document.createElement("div");
         wrap.className = "request-banner";
 
@@ -577,47 +573,24 @@
         left.className = "req-col grow";
         const slot = s.slot || {};
         left.innerHTML = `
-        <h3>${s.name || "Student"} <span class="pill">${
+        <h3>${esc(s.name || "Student")} <span class="pill">${esc(
           s.subject || "—"
-        }</span> <span class="pill">${s.class || "—"}</span></h3>
-        <div class="kv"><span class="k">Date</span><span>${optionLabel(
+        )}</span> <span class="pill">${esc(s.class || "—")}</span></h3>
+        <div class="kv"><span class="k">Date</span><span>${esc(optionLabel(
           slot
-        )}</span></div>
-        <div class="kv"><span class="k">Location</span><span>${
+        ))}</span></div>
+        <div class="kv"><span class="k">Location</span><span>${esc(
           s.location || "N/A"
-        }</span></div>
-        <div class="kv"><span class="k">Status</span><span class="pill">${
+        )}</span></div>
+        <div class="kv"><span class="k">Status</span><span class="pill">${esc(
           s.status || "scheduled"
-        }</span></div>
+        )}</span></div>
       `;
 
         wrap.appendChild(left);
-        if (showCancel || showComplete) {
+        if (showCancel) {
           const right = document.createElement("div");
           right.className = "right";
-          
-          // Commented out manual completion - sessions now auto-complete after their date passes
-          /*
-          if (showComplete && s.status === "scheduled") {
-            const completeBtn = document.createElement("button");
-            completeBtn.className = "primary";
-            completeBtn.textContent = "Mark Completed";
-            completeBtn.addEventListener("click", async () => {
-              if (!confirm("Mark this session as completed? This will add 1 hour to your total.")) return;
-              completeBtn.disabled = true;
-              try {
-                await setDoc(doc(db, "Sessions", s.id), { status: "completed" }, { merge: true });
-                alert("Session marked as completed! An hour has been added to your total.");
-                window.location.reload();
-              } catch (err) {
-                console.error("Error marking session as completed:", err);
-                alert("Failed to mark session as completed. Please try again.");
-                completeBtn.disabled = false;
-              }
-            });
-            right.appendChild(completeBtn);
-          }
-          */
           
           if (showCancel) {
             const cancelBtn = document.createElement("button");
@@ -630,16 +603,19 @@
                 // Prefer original availability; fall back to normalized; last resort: chosen slot only
                 const availability = s.availability ?? (s.slot ? [s.slot] : []);
 
+                // name/subject/class must be strings to satisfy the Requests create rule
                 const reqData = {
-                  name: s.name ?? null,
-                  email: s.email ?? null,
+                  name: s.name ?? "",
+                  email: s.email ?? "",
                   grade: s.grade ?? null,
-                  subject: s.subject ?? null,
-                  class: s.class ?? null,
+                  subject: s.subject ?? "",
+                  class: s.class ?? "",
                   topic: s.topic ?? null,
                   location: s.location ?? null,
                   info: s.info ?? null,
                   availability,
+                  timestamp: serverTimestamp(),
+                  reopenedFromSession: s.id,
                 };
                 // If we know the original requestId, restore into the same doc ID.
                 if (s.requestId) {
@@ -648,8 +624,13 @@
                   await addDoc(collection(db, "Requests"), reqData);
                 }
 
-                // Remove the session
-                await deleteDoc(doc(db, "Sessions", s.id));
+                // Mark the session cancelled (kept for history; this also
+                // triggers the cancellation email to the student).
+                await setDoc(
+                  doc(db, "Sessions", s.id),
+                  { status: "cancelled", cancelledAt: new Date().toISOString(), cancelledBy: auth.currentUser?.uid || null },
+                  { merge: true }
+                );
 
                 // Quick, reliable UI refresh (rebuilds Upcoming, Open, Completed)
                 window.location.reload();
@@ -673,19 +654,14 @@
         completedLoadingEl.classList.remove("hidden");
         completedEl.innerHTML = ""; // clear
 
-        // match by tutorName as requested (same as upcoming)
-        const myName = currentUser.displayName || "";
-        const qSessions = query(
-          collection(db, "Sessions"),
-          where("tutorName", "==", myName)
-        );
-        const sessSnap = await getDocs(qSessions);
+        const sessSnap = await getDocs(mySessionsQuery(currentUser));
 
         const today = todayStart();
         const completed = [];
 
         sessSnap.forEach((d) => {
           const s = d.data() || {};
+          if (s.status === "cancelled") return;
           const dateObj = toDate(s.slot?.date);
           if (!dateObj) return;
           // keep strictly before today (yesterday or earlier)
@@ -739,23 +715,22 @@
         return d;
       };
 
+      // Sessions belong to the tutor by uid (set at finalize time)
+      const mySessionsQuery = (currentUser) =>
+        query(collection(db, "Sessions"), where("tutorUid", "==", currentUser.uid));
+
       async function loadSessions(currentUser) {
         sessionsLoadingEl.classList.remove("hidden");
         sessionsEl.innerHTML = ""; // clear previous render
 
-        // match by tutorName as requested
-        const myName = currentUser.displayName || "";
-        const qSessions = query(
-          collection(db, "Sessions"),
-          where("tutorName", "==", myName)
-        );
-        const sessSnap = await getDocs(qSessions);
+        const sessSnap = await getDocs(mySessionsQuery(currentUser));
 
         const upcoming = [];
         const today = todayStart();
 
         sessSnap.forEach((d) => {
           const s = d.data() || {};
+          if (s.status === "cancelled") return;
           const dateObj = toDate(s.slot?.date);
           if (dateObj && dateObj >= today) {
             upcoming.push({ id: d.id, ...s, _dateObj: dateObj });
@@ -784,16 +759,14 @@
           sessionsEl.appendChild(none);
         } else {
           upcoming.forEach((s) =>
-            sessionsEl.appendChild(
-              renderSession(s, { showCancel: true, currentUser })
-            )
+            sessionsEl.appendChild(renderSession(s, { showCancel: true }))
           );
         }
       }
 
       onAuthStateChanged(auth, async (user) => {
         if (!user) {
-          window.location.href = "signup.html";
+          window.location.href = "signin.html";
           return;
         }
         
@@ -833,61 +806,10 @@
           // teachable set
           const teachSet = buildTeachSet(profile);
 
-          // ========== UPCOMING SESSIONS ==========
-          sessionsLoadingEl.classList.remove("hidden");
-
-          // Query Sessions by tutorName == current user's displayName (as requested)
-          const myName = user.displayName || "";
-          const qSessions = query(
-            collection(db, "Sessions"),
-            where("tutorName", "==", myName)
-          );
-          const sessSnap = await getDocs(qSessions);
-
-          const today = todayStart();
-          const upcoming = [];
-
-          sessSnap.forEach((d) => {
-            const s = d.data() || {};
-            const slot = s.slot || {};
-            const dateObj = toDate(slot.date);
-            if (!dateObj) return;
-            // keep today or future
-            if (dateObj >= today) {
-              upcoming.push({ id: d.id, ...s, _dateObj: dateObj });
-            }
-          });
-
-          // Sort ascending by date, then by cycleDay, then by block (string compare)
-          upcoming.sort((a, b) => {
-            const d = a._dateObj - b._dateObj;
-            if (d !== 0) return d;
-            const ac = (a.slot?.cycleDay ?? "")
-              .toString()
-              .localeCompare((b.slot?.cycleDay ?? "").toString());
-            if (ac !== 0) return ac;
-            return (a.slot?.block ?? "")
-              .toString()
-              .localeCompare((b.slot?.block ?? "").toString());
-          });
-
+          // ========== UPCOMING / COMPLETED / HOURS ==========
+          await loadSessions(user);
           await loadCompletedSessions(user);
           await loadHours(user);
-
-          sessionsLoadingEl.classList.add("hidden");
-
-          if (upcoming.length === 0) {
-            const none = document.createElement("div");
-            none.id = "sessions-empty";
-            none.textContent = "No upcoming sessions.";
-            sessionsEl.appendChild(none);
-        } else {
-          upcoming.forEach((s) =>
-            sessionsEl.appendChild(
-              renderSession(s, { showCancel: true, showComplete: true, currentUser: user })
-            )
-          );
-        }
 
           // ========== OPEN REQUESTS ==========
           const snap = await getDocs(collection(db, "Requests"));
@@ -954,7 +876,12 @@
             // Pending Class Approvals
             leadApprovalsLoadingEl.classList.remove('hidden');
             leadApprovalsEl.innerHTML = '';
-            const approvalsSnap = await getDocs(collection(db, 'ClassRequests'));
+            // Security rules only let a subject lead read ClassRequests for
+            // their own subject, so the query must be constrained to it.
+            const approvalsQ = isHead
+              ? collection(db, 'ClassRequests')
+              : query(collection(db, 'ClassRequests'), where('subject', '==', leadSubject));
+            const approvalsSnap = await getDocs(approvalsQ);
             const pending = [];
             approvalsSnap.forEach((d) => {
               const r = d.data() || {};
@@ -973,9 +900,9 @@
                 row.className = 'request-banner';
                 row.innerHTML = `
                   <div class="req-col grow">
-                    <h3>${r.userName || r.userEmail || 'Tutor'} <span class="pill">${r.subject}</span> <span class="pill">${r.class}</span></h3>
-                    <div class="kv"><span class="k">Email</span><span>${r.userEmail || ''}</span></div>
-                    <div class="kv"><span class="k">Requested</span><span>${r.requestedAt || ''}</span></div>
+                    <h3>${esc(r.userName || r.userEmail || 'Tutor')} <span class="pill">${esc(r.subject)}</span> <span class="pill">${esc(r.class)}</span></h3>
+                    <div class="kv"><span class="k">Email</span><span>${esc(r.userEmail || '')}</span></div>
+                    <div class="kv"><span class="k">Requested</span><span>${esc(fmtDate(r.requestedAt || ''))}</span></div>
                   </div>
                 `;
                 const actions = document.createElement('div');
@@ -990,18 +917,25 @@
                 actions.appendChild(reject);
                 row.appendChild(actions);
 
-                approve.addEventListener('click', async () => {
+                const decide = async (status) => {
                   approve.disabled = true; reject.disabled = true;
-                  const ref = doc(db, 'ClassRequests', r.id);
-                  await setDoc(ref, { status: 'approved', decidedAt: new Date().toISOString() }, { merge: true });
-                  row.remove();
-                });
-                reject.addEventListener('click', async () => {
-                  approve.disabled = true; reject.disabled = true;
-                  const ref = doc(db, 'ClassRequests', r.id);
-                  await setDoc(ref, { status: 'rejected', decidedAt: new Date().toISOString() }, { merge: true });
-                  row.remove();
-                });
+                  try {
+                    await setDoc(doc(db, 'ClassRequests', r.id), {
+                      status,
+                      decidedAt: new Date().toISOString(),
+                      decidedByUid: user.uid,
+                      decidedByName: user.displayName || user.email || null,
+                      decidedByRole: role,
+                    }, { merge: true });
+                    row.remove();
+                  } catch (err) {
+                    console.error('Decision failed', err);
+                    alert('Failed to update request: ' + (err.message || err));
+                    approve.disabled = false; reject.disabled = false;
+                  }
+                };
+                approve.addEventListener('click', () => decide('approved'));
+                reject.addEventListener('click', () => decide('rejected'));
 
                 leadApprovalsEl.appendChild(row);
               });
@@ -1029,9 +963,9 @@
                 row.className = 'request-banner';
                 row.innerHTML = `
                   <div class="req-col grow">
-                    <h3>${r.name || 'Student'} <span class="pill">${r.subject || '—'}</span> <span class="pill">${r.class || '—'}</span></h3>
-                    <div class="kv"><span class="k">Email</span><span>${r.email || ''}</span></div>
-                    <div class="kv"><span class="k">Topic</span><span>${r.topic || '—'}</span></div>
+                    <h3>${esc(r.name || 'Student')} <span class="pill">${esc(r.subject || '—')}</span> <span class="pill">${esc(r.class || '—')}</span></h3>
+                    <div class="kv"><span class="k">Email</span><span>${esc(r.email || '')}</span></div>
+                    <div class="kv"><span class="k">Topic</span><span>${esc(r.topic || '—')}</span></div>
                   </div>
                 `;
                 leadOpenEl.appendChild(row);
@@ -1046,6 +980,7 @@
             const today = todayStart();
             sessAllSnap.forEach((d) => {
               const s = d.data() || {};
+              if (s.status === 'cancelled') return;
               const dateObj = toDate(s.slot?.date);
               if (!dateObj || dateObj >= today) return;
               if (isHead || subjects.has(s.subject)) completed.push({ id: d.id, ...s, _dateObj: dateObj });
@@ -1061,9 +996,11 @@
             }
           }
         } catch (e) {
-          sessionsLoadingEl.classList.add("hidden");
-          loadingEl.textContent = "Failed to load requests.";
           console.error(e);
+          [sessionsLoadingEl, completedLoadingEl, hoursLoadingEl, leadApprovalsLoadingEl, leadOpenLoadingEl, leadCompletedLoadingEl]
+            .forEach((el) => el.classList.add("hidden"));
+          loadingEl.classList.remove("hidden");
+          loadingEl.textContent = "Failed to load: " + (e && e.message ? e.message : e);
         }
       });
 
@@ -1079,8 +1016,6 @@
       const hourDayLabel = document.getElementById("hourDayLabel");
       const hourScheduleWrap = document.getElementById("hourScheduleWrap");
       const hourDescription = document.getElementById("hourDescription");
-      const hoursEl = document.getElementById("hours");
-      const hoursLoadingEl = document.getElementById("hours-loading");
 
       let selectedHourCycleDay = "";
       let selectedHourBlock = "";
@@ -1154,19 +1089,9 @@
           }
         });
 
-        // Save to Firestore for future use
-        try {
-          await setDoc(doc(db, "cycleDays", dateYYYYMMDD), {
-            day: cycleDay || null,
-            summary: summary || null,
-            periods: periods,
-            updatedAt: serverTimestamp()
-          });
-        } catch (err) {
-          console.warn("Failed to save to Firestore:", err);
-        }
+        // (Caching into Firestore is done by admins via the Calendar tab.)
 
-        return { cycleDay, summary, periods, xmlNode: match };
+        return { cycleDay, summary, periods };
       }
 
       function twelveHr(hhmm) {
@@ -1328,8 +1253,8 @@
           hours.push({ id: d.id, ...h });
         });
         hours.sort((a, b) => {
-          const aDate = new Date(a.date || 0);
-          const bDate = new Date(b.date || 0);
+          const aDate = toDate(a.date) || new Date(0);
+          const bDate = toDate(b.date) || new Date(0);
           if (bDate - aDate !== 0) return bDate - aDate;
           return String(b.cycleDay).localeCompare(String(a.cycleDay));
         });
@@ -1350,16 +1275,15 @@
           row.className = "request-banner";
           row.style.marginBottom = "8px";
           const blockName = blocksCatalog[h.block] || h.block;
-          const typeLabel = h.type === "self_reported" ? "Self-Reported" : "Completed Session";
           const typePill = h.type === "self_reported" ? 
             '<span class="pill" style="background:#fef3c7;border-color:#fcd34d;color:#92400e">Self-Reported</span>' :
             '<span class="pill" style="background:#d1fae5;border-color:#6ee7b7;color:#065f46">Auto-Tracked</span>';
           row.innerHTML = `
             <div class="req-col grow">
-              <div><strong>${h.date || "N/A"}</strong> • Day ${h.cycleDay || "?"} • ${blockName} ${typePill}</div>
-              ${h.subject ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">${h.subject}${h.class ? ` — ${h.class}` : ""}</div>` : ""}
-              ${h.description ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">${h.description}</div>` : ""}
-              ${h.studentName ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">Student: ${h.studentName}</div>` : ""}
+              <div><strong>${esc(h.date || "N/A")}</strong> • Day ${esc(h.cycleDay || "?")} • ${esc(blockName)} ${typePill}</div>
+              ${h.subject ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">${esc(h.subject)}${h.class ? ` — ${esc(h.class)}` : ""}</div>` : ""}
+              ${h.description ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">${esc(h.description)}</div>` : ""}
+              ${h.studentName ? `<div style="margin-top:4px;font-size:13px;color:#6b7280">Student: ${esc(h.studentName)}</div>` : ""}
             </div>
           `;
           hoursEl.appendChild(row);

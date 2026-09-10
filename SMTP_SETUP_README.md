@@ -15,7 +15,7 @@ The Firebase Cloud Functions now use **SMTP with nodemailer** to send emails ins
 ### 2. Secret Configuration
 The following Firebase secrets are now used:
 - `SMTP_USER`: Email address (uspeertutoring@gmail.com)
-- `SMTP_PASSWORD`: Gmail app password (teiy zvdm uplv ddnv)
+- `SMTP_PASSWORD`: Gmail app password (<GMAIL_APP_PASSWORD>)
 
 ### 3. Code Changes
 - Replaced `getGmailClient()` OAuth function with `createEmailTransporter()` SMTP configuration
@@ -49,7 +49,7 @@ echo "uspeertutoring@gmail.com" | firebase functions:secrets:set SMTP_USER
 
 2. **Set SMTP_PASSWORD secret:**
 ```powershell
-echo "teiy zvdm uplv ddnv" | firebase functions:secrets:set SMTP_PASSWORD
+echo "<GMAIL_APP_PASSWORD>" | firebase functions:secrets:set SMTP_PASSWORD
 ```
 
 ### Option 3: Using Firebase Console
@@ -59,7 +59,7 @@ echo "teiy zvdm uplv ddnv" | firebase functions:secrets:set SMTP_PASSWORD
 3. Navigate to Functions → Secrets
 4. Create two secrets:
    - Name: `SMTP_USER`, Value: `uspeertutoring@gmail.com`
-   - Name: `SMTP_PASSWORD`, Value: `teiy zvdm uplv ddnv`
+   - Name: `SMTP_PASSWORD`, Value: `<GMAIL_APP_PASSWORD>`
 
 ## Deploying the Changes
 
@@ -76,7 +76,7 @@ To test the email functionality locally with the Firebase emulator:
 1. Set environment variables in your local terminal:
 ```powershell
 $env:SMTP_USER="uspeertutoring@gmail.com"
-$env:SMTP_PASSWORD="teiy zvdm uplv ddnv"
+$env:SMTP_PASSWORD="<GMAIL_APP_PASSWORD>"
 ```
 
 2. Start the Firebase emulators:
@@ -98,7 +98,7 @@ firebase emulators:start
 
 ⚠️ **Important**: The Gmail app password is stored as a Firebase secret and should never be committed to version control.
 
-The app password (`teiy zvdm uplv ddnv`) is a Gmail-specific app password that:
+The app password (`<GMAIL_APP_PASSWORD>`) is a Gmail-specific app password that:
 - Only works for SMTP authentication
 - Can be revoked at any time from Google Account settings
 - Does not provide access to the full Gmail account

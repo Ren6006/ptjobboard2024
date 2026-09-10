@@ -6,6 +6,8 @@
     <title>Submit a Tutoring Request</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="catalog.js"></script>
     <style>
       * {
         box-sizing: border-box;
@@ -318,13 +320,13 @@
         </select>
         <select id="subject">
           <option selected value="" disabled>↓ Select a subject</option>
-          <option>Math</option>
-          <option>Science</option>
-          <option>English</option>
-          <option>History</option>
-          <option>World Language</option>
-          <option>Computer Science</option>
-          <option>Other</option>
+          <option value="Math">Math</option>
+          <option value="Science">Science</option>
+          <option value="English">English</option>
+          <option value="History">History</option>
+          <option value="World Language">World Language</option>
+          <option value="Computer Science">Computer Science</option>
+          <option value="Other">Other</option>
         </select>
         <select id="class">
           <option value="" disabled selected>
@@ -416,115 +418,20 @@
 
     <script>
       // ===== Firebase =====
-      const firebaseConfig = {
-        apiKey: "AIzaSyDY2gf5I7kJQ7iXD8F6U2BrEMCYjfnFQxk",
-        authDomain: "ptjobboard2024.firebaseapp.com",
-        databaseURL: "https://ptjobboard2024-default-rtdb.firebaseio.com",
-        projectId: "ptjobboard2024",
-        storageBucket: "ptjobboard2024.firebasestorage.app",
-        messagingSenderId: "401143229772",
-        appId: "1:401143229772:web:b5b14d89a89d75443df3e9",
-        measurementId: "G-PF9F78SKZV",
-      };
       if (!firebase.apps || !firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(window.__FIREBASE_CONFIG__);
       }
       const db = firebase.firestore();
 
-      // ===== Class options (unchanged) =====
+      // ===== Class options (shared catalog) =====
+      const CATALOG = window.__CATALOG__;
       const subjectChoice = document.getElementById("subject");
       const classSelect = document.getElementById("class");
-      const options = {
-        math: [
-          "Algebra II",
-          "Advanced Algebra II",
-          "Honors Algebra II",
-          "Precalculus",
-          "Advanced Precalculus",
-          "Honors Precalculus",
-          "Calculus I",
-          "Honors Calculus I",
-          "Honors Calculus I & II",
-          "Honors Calculus II",
-          "Calc & Stats",
-          "Linear Algebra",
-          "Multivariable Calculus",
-          "Other",
-        ],
-        science: [
-          "Chemistry",
-          "Honors Chemistry I",
-          "Human Anatomy & Physiology",
-          "Genetics and Biotechnology",
-          "Honors Molecular & Cellular Biology",
-          "Honors Evolution & Ecology",
-          "Astronomy",
-          "Oceanography and Marine Biology",
-          "Honors Geology",
-          "Physics I",
-          "Honors Physics I",
-          "Honors Chemistry II",
-          "Honors Organic Chemistry",
-          "Honors Environmental Science",
-          "Honors Physics II",
-          "Honors Physics C: Mechanics",
-          "Honors Physics C: Electricity & Magnetism",
-          "Other",
-        ],
-        history: [
-          "Rise of The Modern World",
-          "ROTW Art History",
-          "Thematic US History",
-          "Honors US History",
-          "Other",
-        ],
-        english: ["English II", "English III", "Honors English III", "Other"],
-        "world language": [
-          "Latin II",
-          "Latin III",
-          "Honors III",
-          "Advanced Latin III",
-          "Latin IV",
-          "Honors Latin Lit I",
-          "Honors Latin Lit II",
-          "Chinese II",
-          "Chinese III",
-          "Honors III",
-          "Advanced Chinese III",
-          "Chinese IV",
-          "Chinese V",
-          "Honors Chinese Lang & Culture",
-          "Honors Chinese Lit & Arts",
-          "French II",
-          "French III",
-          "Honors III",
-          "Advanced French III",
-          "French IV",
-          "French V: Contemporary Culture and Communication",
-          "Honors French Lang & Culture",
-          "Honors French Lit & Arts",
-          "Spanish II",
-          "Spanish III",
-          "Honors III",
-          "Advanced Spanish III",
-          "Spanish IV",
-          "Spanish V: Interdisciplinary Spanish Studies",
-          "Honors Spanish Lang & Culture",
-          "Honors Spanish Lit & Arts",
-          "Honors Spanish Seminar: History of Spain and Latin America",
-          "Other",
-        ],
-        "computer science": [
-          "Advanced Computer Science",
-          "Design and Data Structures",
-        ],
-        other: ["Other"],
-      };
       subjectChoice.addEventListener("change", () => {
-        const s = subjectChoice.value?.toLowerCase();
+        const list = CATALOG.subjects[subjectChoice.value] || [];
         classSelect.innerHTML =
           '<option value="" disabled selected>↓ Select a class</option>';
-        (options[s] || []).forEach((t) => {
+        list.forEach((t) => {
           const o = document.createElement("option");
           o.value = t;
           o.textContent = t;
@@ -535,32 +442,7 @@
       // Keep track of the selected date's cycle day (from XML)
       let selectedCycleDay = "";
 
-      // Safe getter for possible tag names in the HW XML
-      function getFirstTagText(node, tagNames = []) {
-        for (const t of tagNames) {
-          const el = node.getElementsByTagName(t)[0];
-          if (el && el.textContent) return el.textContent.trim();
-        }
-        return "";
-      }
-      const blocksCatalog = {
-        1: "Block 1",
-        M11: "Junior Seminar",
-        2: "Block 2",
-        L: "Lunch",
-        3: "Block 3",
-        DS: "DS",
-        CC: "CC (3:15-4:00)",
-        4: "Block 4",
-        M10: "Soph. Seminar",
-        5: "Block 5",
-        6: "Block 6",
-        7: "Block 7",
-        FC: "Faculty Collaboration",
-        M12: "Senior Seminar",
-        CT: "Community Time",
-        OH: "Office Hours",
-      };
+      const blocksCatalog = CATALOG.blocks;
 
       // ===== Availability picker state =====
       const slots = []; // {date: 'MM/DD/YYYY', block: '1' | 'M11' | 'L' | ..., cycleDay: '1' | '2' | ...}
@@ -581,7 +463,15 @@
         slots.forEach((s, idx) => {
           const chip = document.createElement("span");
           chip.className = "chip";
-          chip.innerHTML = `${s.date}<strong>${s.block}</strong> <button aria-label="Remove" data-idx="${idx}">×</button>`;
+          const label = document.createElement("span");
+          label.textContent = `${s.date} · ${blocksCatalog[s.block] || s.block}`;
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.setAttribute("aria-label", "Remove");
+          remove.dataset.idx = String(idx);
+          remove.textContent = "×";
+          chip.appendChild(label);
+          chip.appendChild(remove);
           chip.querySelector("button").addEventListener("click", (e) => {
             slots.splice(idx, 1);
             renderChips();
@@ -700,22 +590,10 @@
           }
         });
 
-        // Save to Firestore for future use
-        try {
-          await db
-            .collection("cycleDays")
-            .doc(dateYYYYMMDD)
-            .set({
-              day: cycleDay || null,
-              summary: summary || null,
-              periods: periods,
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            });
-        } catch (err) {
-          console.warn("Failed to save to Firestore:", err);
-        }
+        // (Caching into Firestore is done by admins via the Calendar tab;
+        // anonymous students are not allowed to write.)
 
-        return { cycleDay, summary, periods, xmlNode: match };
+        return { cycleDay, summary, periods };
       }
 
       function twelveHr(hhmm) {
@@ -838,6 +716,7 @@
           const info = document.getElementById("info").value.trim();
 
           const errors = [];
+          if (!name) errors.push("Please enter your name.");
           if (!(email.endsWith("@hwemail.com") || email.endsWith("@hw.com")))
             errors.push("Email must end with '@hwemail.com' or '@hw.com'.");
           if (!grade) errors.push("Please select a grade.");

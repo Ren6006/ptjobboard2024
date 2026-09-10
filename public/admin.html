@@ -7,6 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
     <script src="firebase-config.js"></script>
+    <script src="catalog.js"></script>
     <style>
       * { box-sizing: border-box; }
       body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f7f7fb; color:#111827; }
@@ -89,18 +90,28 @@
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
       import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
       import { getFirestore, collection, getDocs, setDoc, doc, getDoc, query, where, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+      import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
        const app = initializeApp(window.__FIREBASE_CONFIG__);
       const auth = getAuth(app);
       const db = getFirestore(app);
+      const functions = getFunctions(app, 'us-central1');
       await setPersistence(auth, browserLocalPersistence).catch(()=>{});
+
+      const CATALOG = window.__CATALOG__;
+
+      // Escape untrusted text before it goes into innerHTML (requests come
+      // from anonymous students; names/descriptions from any signed-in user).
+      const esc = (v) => String(v ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
       const who = document.getElementById('who');
       const tabs = document.querySelectorAll('.tab');
        const panels = { approvals: document.getElementById('approvals'), requests: document.getElementById('requests'), sessions: document.getElementById('sessions'), hours: document.getElementById('hours'), users: document.getElementById('users'), calendar: document.getElementById('calendar'), analytics: document.getElementById('analytics') };
        const shell = document.querySelector('.shell');
        const loadingBanner = document.getElementById('loadingBanner');
-      
+
       tabs.forEach(t => t.addEventListener('click', () => {
         tabs.forEach(x => x.classList.remove('active'));
         t.classList.add('active');
@@ -154,7 +165,7 @@
             const snap = await getDocs(collection(db, 'ClassRequests'));
             const items = [];
             snap.forEach(d => { const r = d.data() || {}; items.push({ id: d.id, ...r }); });
-            
+
             let filtered = items;
             const subFilter = filterSubject.value.toLowerCase().trim();
             const userFilter = filterUser.value.toLowerCase().trim();
@@ -162,7 +173,7 @@
             if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter));
             if (userFilter) filtered = filtered.filter(r => (r.userName||'').toLowerCase().includes(userFilter) || (r.userEmail||'').toLowerCase().includes(userFilter));
             if (statFilter) filtered = filtered.filter(r => r.status === statFilter);
-            
+
             // Group by user
             const byUser = {};
             filtered.forEach(r => {
@@ -176,32 +187,32 @@
               }
               byUser[key].requests.push(r);
             });
-            
+
             // Sort users by name
             const userList = Object.values(byUser).sort((a,b) => a.name.localeCompare(b.name));
-            
+
             approvalsList.innerHTML = '';
             if (userList.length === 0) {
               approvalsList.innerHTML = '<div class="empty">No class requests found.</div>';
               return;
             }
-            
+
             userList.forEach((userData, idx) => {
               const userContainer = document.createElement('div');
               userContainer.style.marginBottom = '12px';
-              
+
               // User header (clickable)
               const userHeader = document.createElement('div');
               userHeader.className = 'item';
               userHeader.style.cursor = 'pointer';
-              
+
               // Track counts with object so they can be updated
               const counts = {
                 pending: userData.requests.filter(r => r.status === 'pending').length,
                 approved: userData.requests.filter(r => r.status === 'approved').length,
                 rejected: userData.requests.filter(r => r.status === 'rejected').length
               };
-              
+
               // Determine bullet color: yellow if any pending, green if all approved, red if only rejected
               const getBulletColor = () => {
                 if (counts.pending > 0) return '#f59e0b'; // yellow/amber
@@ -209,29 +220,29 @@
                 if (counts.rejected > 0 && counts.approved === 0 && counts.pending === 0) return '#ef4444'; // red (only rejected)
                 return '#6b7280'; // default gray
               };
-              
+
               userHeader.innerHTML = `
                 <div class="grow">
                   <div style="display:flex;align-items:center;gap:8px">
                     <span style="font-size:14px;color:${getBulletColor()}" id="arrow-${idx}">●</span>
-                    <strong>${userData.name}</strong> • ${userData.email}
+                    <strong>${esc(userData.name)}</strong> • ${esc(userData.email)}
                   </div>
                   <div style="margin-top:4px;font-size:13px;color:#6b7280">
-                    ${userData.requests.length} class${userData.requests.length !== 1 ? 'es' : ''} 
+                    ${userData.requests.length} class${userData.requests.length !== 1 ? 'es' : ''}
                     ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
                     ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
                     ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
                   </div>
                 </div>
               `;
-              
+
               // Classes list (hidden by default)
               const classList = document.createElement('div');
               classList.id = `classes-${idx}`;
               classList.style.display = 'none';
               classList.style.marginLeft = '32px';
               classList.style.marginTop = '8px';
-              
+
               // Sort classes: pending first, then by subject
               userData.requests.sort((a,b) => {
                 const statusOrder = { pending: 0, approved: 1, rejected: 2 };
@@ -240,44 +251,44 @@
                 if (aOrder !== bOrder) return aOrder - bOrder;
                 return String(a.subject).localeCompare(String(b.subject));
               });
-              
+
               userData.requests.forEach(r => {
                 const classRow = document.createElement('div');
                 classRow.className = 'item';
                 classRow.style.marginBottom = '6px';
                 const statusClass = r.status === 'pending' ? 'pending' : r.status === 'approved' ? 'approved' : 'rejected';
-                
+
                 const contentDiv = document.createElement('div');
                 contentDiv.className = 'grow';
                 contentDiv.innerHTML = `
-                  <div>${r.subject} — ${r.class} <span class="pill ${statusClass}" id="status-${r.id}">${r.status}</span></div>
+                  <div>${esc(r.subject)} — ${esc(r.class)} <span class="pill ${statusClass}" id="status-${r.id}">${esc(r.status)}</span></div>
                   <div style="font-size:12px;color:#6b7280;margin-top:4px">Requested: ${fmtDate(r.requestedAt)}</div>
                 `;
                 classRow.appendChild(contentDiv);
-                
+
                 if (r.status === 'pending') {
                   const actions = document.createElement('div');
                   actions.className = 'right';
                   actions.id = `actions-${r.id}`;
-                  const approve = document.createElement('button'); 
-                  approve.textContent = 'Approve'; 
+                  const approve = document.createElement('button');
+                  approve.textContent = 'Approve';
                   approve.className = 'btn primary';
-                  const reject = document.createElement('button'); 
-                  reject.textContent = 'Reject'; 
+                  const reject = document.createElement('button');
+                  reject.textContent = 'Reject';
                   reject.className = 'btn';
-                  
-                  approve.addEventListener('click', async (e) => { 
+
+                  approve.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    approve.disabled = true; 
-                    reject.disabled = true; 
-                    await setDoc(doc(db, 'ClassRequests', r.id), { 
-                      status: 'approved', 
-                      decidedAt: new Date().toISOString(), 
-                      decidedByUid: user.uid, 
-                      decidedByName: user.displayName || user.email, 
-                      decidedByRole: role 
+                    approve.disabled = true;
+                    reject.disabled = true;
+                    await setDoc(doc(db, 'ClassRequests', r.id), {
+                      status: 'approved',
+                      decidedAt: new Date().toISOString(),
+                      decidedByUid: user.uid,
+                      decidedByName: user.displayName || user.email,
+                      decidedByRole: role
                     }, { merge: true });
-                    
+
                     // Update UI in place
                     const statusPill = document.getElementById(`status-${r.id}`);
                     if (statusPill) {
@@ -285,11 +296,11 @@
                       statusPill.className = 'pill approved';
                     }
                     actions.remove();
-                    
+
                     // Update counts
                     counts.pending--;
                     counts.approved++;
-                    
+
                     // Update bullet color
                     const arrow = document.getElementById(`arrow-${idx}`);
                     if (arrow) {
@@ -303,30 +314,30 @@
                         arrow.style.color = '#6b7280'; // gray
                       }
                     }
-                    
+
                     // Update counts in header
                     const headerCounts = userHeader.querySelector('.grow > div:nth-child(2)');
                     const totalClasses = userData.requests.length;
                     headerCounts.innerHTML = `
-                      ${totalClasses} class${totalClasses !== 1 ? 'es' : ''} 
+                      ${totalClasses} class${totalClasses !== 1 ? 'es' : ''}
                       ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
                       ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
                       ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
                     `;
                   });
-                  
-                  reject.addEventListener('click', async (e) => { 
+
+                  reject.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    approve.disabled = true; 
-                    reject.disabled = true; 
-                    await setDoc(doc(db, 'ClassRequests', r.id), { 
-                      status: 'rejected', 
-                      decidedAt: new Date().toISOString(), 
-                      decidedByUid: user.uid, 
-                      decidedByName: user.displayName || user.email, 
-                      decidedByRole: role 
+                    approve.disabled = true;
+                    reject.disabled = true;
+                    await setDoc(doc(db, 'ClassRequests', r.id), {
+                      status: 'rejected',
+                      decidedAt: new Date().toISOString(),
+                      decidedByUid: user.uid,
+                      decidedByName: user.displayName || user.email,
+                      decidedByRole: role
                     }, { merge: true });
-                    
+
                     // Update UI in place
                     const statusPill = document.getElementById(`status-${r.id}`);
                     if (statusPill) {
@@ -334,11 +345,11 @@
                       statusPill.className = 'pill rejected';
                     }
                     actions.remove();
-                    
+
                     // Update counts
                     counts.pending--;
                     counts.rejected++;
-                    
+
                     // Update bullet color
                     const arrow = document.getElementById(`arrow-${idx}`);
                     if (arrow) {
@@ -352,33 +363,33 @@
                         arrow.style.color = '#6b7280'; // gray
                       }
                     }
-                    
+
                     // Update counts in header
                     const headerCounts = userHeader.querySelector('.grow > div:nth-child(2)');
                     const totalClasses = userData.requests.length;
                     headerCounts.innerHTML = `
-                      ${totalClasses} class${totalClasses !== 1 ? 'es' : ''} 
+                      ${totalClasses} class${totalClasses !== 1 ? 'es' : ''}
                       ${counts.pending > 0 ? `(${counts.pending} pending)` : ''}
                       ${counts.approved > 0 ? `(${counts.approved} approved)` : ''}
                       ${counts.rejected > 0 ? `(${counts.rejected} rejected)` : ''}
                     `;
                   });
-                  
-                  actions.appendChild(approve); 
+
+                  actions.appendChild(approve);
                   actions.appendChild(reject);
                   classRow.appendChild(actions);
                 }
-                
+
                 classList.appendChild(classRow);
               });
-              
+
               // Toggle expand/collapse
               userHeader.addEventListener('click', () => {
                 const isOpen = classList.style.display !== 'none';
                 classList.style.display = isOpen ? 'none' : 'block';
                 document.getElementById(`arrow-${idx}`).textContent = isOpen ? '●' : '○';
               });
-              
+
               userContainer.appendChild(userHeader);
               userContainer.appendChild(classList);
               approvalsList.appendChild(userContainer);
@@ -404,11 +415,11 @@
              const snap = await getDocs(collection(db, 'Requests'));
              const items = [];
              snap.forEach(d => { const r = d.data() || {}; items.push({ id: d.id, ...r }); });
-             
+
              let filtered = items;
              const subFilter = filterReqSubject.value.toLowerCase().trim();
              if (subFilter) filtered = filtered.filter(r => (r.subject||'').toLowerCase().includes(subFilter) || (r.class||'').toLowerCase().includes(subFilter) || (r.name||'').toLowerCase().includes(subFilter));
-             
+
              reqList.innerHTML = '';
              if (filtered.length === 0) {
                reqList.innerHTML = '<div class="empty">No tutoring requests found.</div>';
@@ -420,10 +431,10 @@
                const avail = Array.isArray(r.availability) ? r.availability.map(s => `${s.date} Day${s.cycleDay} ${s.block}`).join(', ') : 'N/A';
                row.innerHTML = `
                  <div class="grow">
-                   <div><strong>${r.name || 'Student'}</strong> • ${r.email || ''}</div>
-                   <div style="margin-top:4px">${r.subject} — ${r.class} <span class="pill">Grade ${r.grade||'?'}</span></div>
-                   <div style="font-size:13px;color:#6b7280;margin-top:4px">Topic: ${r.topic || '—'} | Location: ${r.location || '—'}</div>
-                   <div style="font-size:12px;color:#9ca3af;margin-top:2px">Availability: ${avail}</div>
+                   <div><strong>${esc(r.name || 'Student')}</strong> • ${esc(r.email || '')}</div>
+                   <div style="margin-top:4px">${esc(r.subject)} — ${esc(r.class)} <span class="pill">Grade ${esc(r.grade||'?')}</span></div>
+                   <div style="font-size:13px;color:#6b7280;margin-top:4px">Topic: ${esc(r.topic || '—')} | Location: ${esc(r.location || '—')}</div>
+                   <div style="font-size:12px;color:#9ca3af;margin-top:2px">Availability: ${esc(avail)}</div>
                  </div>
                  <div class="right">
                    <button class="btn danger" data-id="${r.id}">Delete</button>
@@ -456,13 +467,13 @@
              const snap = await getDocs(collection(db, 'Sessions'));
              const items = [];
              snap.forEach(d => { const s = d.data() || {}; items.push({ id: d.id, ...s }); });
-             
+
              let filtered = items;
              const statFilter = filterSessionStatus.value;
              const subFilter = filterSessionSubject.value.toLowerCase().trim();
              if (statFilter) filtered = filtered.filter(s => s.status === statFilter);
              if (subFilter) filtered = filtered.filter(s => (s.subject||'').toLowerCase().includes(subFilter) || (s.tutorName||'').toLowerCase().includes(subFilter) || (s.name||'').toLowerCase().includes(subFilter));
-             
+
              filtered.sort((a,b) => {
                const aDate = new Date(a.slot?.date||0);
                const bDate = new Date(b.slot?.date||0);
@@ -480,9 +491,9 @@
                const slotLabel = `${s.slot?.date||'?'} Day ${s.slot?.cycleDay||'?'} ${s.slot?.block||'?'}`;
                row.innerHTML = `
                  <div class="grow">
-                   <div><strong>${s.name || 'Student'}</strong> • ${s.email || ''} <span class="pill ${statusClass}">${s.status||'scheduled'}</span></div>
-                   <div style="margin-top:4px">${s.subject} — ${s.class} | Tutor: ${s.tutorName || '—'}</div>
-                   <div style="font-size:13px;color:#6b7280;margin-top:4px">Slot: ${slotLabel} | Location: ${s.location || '—'}</div>
+                   <div><strong>${esc(s.name || 'Student')}</strong> • ${esc(s.email || '')} <span class="pill ${statusClass}">${esc(s.status||'scheduled')}</span></div>
+                   <div style="margin-top:4px">${esc(s.subject)} — ${esc(s.class)} | Tutor: ${esc(s.tutorName || '—')}</div>
+                   <div style="font-size:13px;color:#6b7280;margin-top:4px">Slot: ${esc(slotLabel)} | Location: ${esc(s.location || '—')}</div>
                  </div>
                  <div class="right">
                    <button class="btn danger" data-id="${s.id}">Delete</button>
@@ -510,24 +521,18 @@
            const hoursList = document.getElementById('hoursList');
            document.getElementById('refreshHours').addEventListener('click', renderHours);
 
-           const blocksCatalog = {
-             "1": "Block 1", "M11": "Junior Seminar", "2": "Block 2", "L": "Lunch",
-             "3": "Block 3", "DS": "DS", "CC": "CC (3:15-4:00)", "4": "Block 4",
-             "M10": "Soph. Seminar", "5": "Block 5", "6": "Block 6", "7": "Block 7",
-             "FC": "Faculty Collaboration", "M12": "Senior Seminar", "CT": "Community Time",
-             "OH": "Office Hours",
-           };
+           const blocksCatalog = CATALOG.blocks;
 
            async function renderHours() {
              hoursList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
              const snap = await getDocs(collection(db, 'Hours'));
              const items = [];
              snap.forEach(d => { const h = d.data() || {}; items.push({ id: d.id, ...h }); });
-             
+
              let filtered = items;
              const userFilter = filterHourUser.value.toLowerCase().trim();
              if (userFilter) filtered = filtered.filter(h => (h.tutorName||'').toLowerCase().includes(userFilter) || (h.tutorEmail||'').toLowerCase().includes(userFilter));
-             
+
              // Group by tutor
              const byTutor = {};
              filtered.forEach(h => {
@@ -542,57 +547,57 @@
                }
                byTutor[key].hours.push(h);
              });
-             
+
              // Sort tutors by name
              const tutorList = Object.values(byTutor).sort((a,b) => a.name.localeCompare(b.name));
-             
+
              hoursList.innerHTML = '';
              if (tutorList.length === 0) {
                hoursList.innerHTML = '<div class="empty">No hours found.</div>';
                return;
              }
-             
+
              tutorList.forEach((tutorData, idx) => {
                const tutorContainer = document.createElement('div');
                tutorContainer.style.marginBottom = '12px';
-               
+
                // Sort hours by date (most recent first)
                tutorData.hours.sort((a,b) => {
                  const aDate = new Date(a.date || 0);
                  const bDate = new Date(b.date || 0);
                  return bDate - aDate;
                });
-               
+
                const totalHours = tutorData.hours.length;
                const selfReported = tutorData.hours.filter(h => h.type === 'self_reported').length;
                const autoTracked = tutorData.hours.filter(h => h.type === 'completed_session').length;
-               
+
                // Tutor header (clickable)
                const tutorHeader = document.createElement('div');
                tutorHeader.className = 'item';
                tutorHeader.style.cursor = 'pointer';
-               
+
                tutorHeader.innerHTML = `
                  <div class="grow">
                    <div style="display:flex;align-items:center;gap:8px">
                      <span style="font-size:14px" id="hour-arrow-${idx}">●</span>
-                     <strong>${tutorData.name}</strong> • ${tutorData.email}
+                     <strong>${esc(tutorData.name)}</strong> • ${esc(tutorData.email)}
                    </div>
                    <div style="margin-top:4px;font-size:13px;color:#6b7280">
-                     ${totalHours} hour${totalHours !== 1 ? 's' : ''} 
+                     ${totalHours} hour${totalHours !== 1 ? 's' : ''}
                      ${autoTracked > 0 ? `(${autoTracked} auto-tracked)` : ''}
                      ${selfReported > 0 ? `(${selfReported} self-reported)` : ''}
                    </div>
                  </div>
                `;
-               
+
                // Hours list (hidden by default)
                const hourDetailsList = document.createElement('div');
                hourDetailsList.id = `hour-details-${idx}`;
                hourDetailsList.style.display = 'none';
                hourDetailsList.style.marginLeft = '32px';
                hourDetailsList.style.marginTop = '8px';
-               
+
                tutorData.hours.forEach(h => {
                  const hourRow = document.createElement('div');
                  hourRow.className = 'item';
@@ -600,27 +605,27 @@
                  const blockName = blocksCatalog[h.block] || h.block;
                  const typeClass = h.type === 'self_reported' ? 'pending' : 'approved';
                  const typeLabel = h.type === 'self_reported' ? 'Self-Reported' : 'Auto-Tracked';
-                 
+
                  hourRow.innerHTML = `
                    <div class="grow">
-                     <div><strong>${h.date || 'N/A'}</strong> • Day ${h.cycleDay || '?'} • ${blockName} <span class="pill ${typeClass}">${typeLabel}</span></div>
-                     ${h.subject ? `<div style="font-size:12px;color:#6b7280;margin-top:4px">${h.subject}${h.class ? ` — ${h.class}` : ''}</div>` : ''}
-                     ${h.description ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">${h.description}</div>` : ''}
-                     ${h.studentName ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">Student: ${h.studentName}</div>` : ''}
-                     <div style="font-size:11px;color:#9ca3af;margin-top:2px">Added: ${h.createdAt || 'N/A'}</div>
+                     <div><strong>${esc(h.date || 'N/A')}</strong> • Day ${esc(h.cycleDay || '?')} • ${esc(blockName)} <span class="pill ${typeClass}">${typeLabel}</span></div>
+                     ${h.subject ? `<div style="font-size:12px;color:#6b7280;margin-top:4px">${esc(h.subject)}${h.class ? ` — ${esc(h.class)}` : ''}</div>` : ''}
+                     ${h.description ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">${esc(h.description)}</div>` : ''}
+                     ${h.studentName ? `<div style="font-size:12px;color:#6b7280;margin-top:2px">Student: ${esc(h.studentName)}</div>` : ''}
+                     <div style="font-size:11px;color:#9ca3af;margin-top:2px">Added: ${esc(fmtDate(h.createdAt || 'N/A'))}</div>
                    </div>
                  `;
-                 
+
                  hourDetailsList.appendChild(hourRow);
                });
-               
+
                // Toggle expand/collapse
                tutorHeader.addEventListener('click', () => {
                  const isOpen = hourDetailsList.style.display !== 'none';
                  hourDetailsList.style.display = isOpen ? 'none' : 'block';
                  document.getElementById(`hour-arrow-${idx}`).textContent = isOpen ? '●' : '○';
                });
-               
+
                tutorContainer.appendChild(tutorHeader);
                tutorContainer.appendChild(hourDetailsList);
                hoursList.appendChild(tutorContainer);
@@ -633,12 +638,12 @@
          // ========== TAB 5: USERS & ROLES ==========
          async function loadUsers() {
            const container = panels.users;
-           container.innerHTML = '<h2>Users & Roles</h2><p style="color:#6b7280;font-size:14px">Click Edit to modify user details, or Add User to create a new account.</p><div class="filters"><input id="filterUser" placeholder="Search by name/email..." /><button id="refreshUsers">Refresh</button><button id="addUser" class="btn primary" style="margin-left:auto">+ Add User</button></div><div id="usersList"></div>';
-           const filterUser = document.getElementById('filterUser');
+           container.innerHTML = '<h2>Users & Roles</h2><p style="color:#6b7280;font-size:14px">Click Edit to modify user details, or Add User to create a new account.</p><div class="filters"><input id="filterUserSearch" placeholder="Search by name/email..." /><button id="refreshUsers">Refresh</button><button id="addUser" class="btn primary" style="margin-left:auto">+ Add User</button></div><div id="usersList"></div>';
+           const filterUser = document.getElementById('filterUserSearch');
            const usersList = document.getElementById('usersList');
            document.getElementById('refreshUsers').addEventListener('click', renderUsers);
 
-           const roleOptions = ['student', 'Admin', 'Head', 'Developer', 'Math Lead', 'Science Lead', 'English Lead', 'History Lead', 'World Language Lead', 'Computer Science Lead'];
+           const roleOptions = CATALOG.roles;
 
            document.getElementById('addUser').addEventListener('click', async () => {
              const name = prompt('Enter full name:');
@@ -647,13 +652,18 @@
              if (!email || !(email.endsWith('@hwemail.com') || email.endsWith('@hw.com'))) { alert('Invalid email'); return; }
              const password = prompt('Enter temporary password (min 6 chars):');
              if (!password || password.length < 6) { alert('Password must be at least 6 characters'); return; }
-             
+             const roleInput = prompt('Role (' + roleOptions.join(', ') + '):', 'student');
+             if (roleInput === null) return;
+             const newRole = roleOptions.includes(roleInput.trim()) ? roleInput.trim() : 'student';
+
              try {
-               // Note: Client SDK can't create users directly; this requires Admin SDK
-               // Workaround: User must sign up via signup.html, or we need a Cloud Function
-               alert('To add users, either:\\n1. Have them sign up at signup.html\\n2. Create a Cloud Function for admin user creation\\n\\nFor now, you can manually edit an existing user or wait for them to sign up.');
+               const createUser = httpsCallable(functions, 'adminCreateUser');
+               const res = await createUser({ name: name.trim(), email: email.trim(), password, role: newRole });
+               alert('User created (' + res.data.uid + '). Share the temporary password with them and ask them to use "Forgot your password?" to set their own.');
+               renderUsers();
              } catch (e) {
-               alert('Error: ' + (e.message || 'Failed to create user'));
+               console.error('adminCreateUser failed', e);
+               alert('Error: ' + (e.message || 'Failed to create user') + '\n\n(If this says "not-found", the adminCreateUser Cloud Function has not been deployed yet: run "firebase deploy --only functions".)');
              }
            });
 
@@ -661,22 +671,22 @@
              usersList.innerHTML = '<div style="padding:12px;color:#6b7280">Loading...</div>';
              const snap = await getDocs(collection(db, 'users'));
              const items = [];
-             snap.forEach(d => { 
+             snap.forEach(d => {
                const u = d.data() || {};
                if (!u.deleted) items.push({ uid: d.id, ...u });
              });
-             
+
              let filtered = items;
              const userFilter = filterUser.value.toLowerCase().trim();
              if (userFilter) filtered = filtered.filter(u => (u.name||'').toLowerCase().includes(userFilter) || (u.email||'').toLowerCase().includes(userFilter));
-             
+
              filtered.sort((a,b) => String(a.name||a.email).localeCompare(String(b.name||b.email)));
              usersList.innerHTML = '';
              if (filtered.length === 0) {
                usersList.innerHTML = '<div class="empty">No users found.</div>';
                return;
              }
-             
+
              const table = document.createElement('table');
              table.innerHTML = '<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Grade</th><th>Classes</th><th>Actions</th></tr></thead><tbody></tbody>';
              const tbody = table.querySelector('tbody');
@@ -685,35 +695,37 @@
                tr.className = 'user-row';
                const classes = Array.isArray(u.classes) ? u.classes.slice(0,3).join(', ') + (u.classes.length > 3 ? '...' : '') : (u.classes||'—');
                const currentRole = u.role || 'student';
-               
+
                tr.innerHTML = `
-                 <td>${u.name || '—'}</td>
-                 <td>${u.email || '—'}</td>
-                 <td><span class="pill">${currentRole}</span></td>
-                 <td>${u.grade || '—'}</td>
-                 <td style="font-size:12px;color:#6b7280">${classes}</td>
-                 <td><button class="btn" data-uid="${u.uid}">Edit</button></td>
+                 <td>${esc(u.name || '—')}</td>
+                 <td>${esc(u.email || '—')}</td>
+                 <td><span class="pill">${esc(currentRole)}</span></td>
+                 <td>${esc(u.grade || '—')}</td>
+                 <td style="font-size:12px;color:#6b7280">${esc(classes)}</td>
+                 <td><button class="btn" data-uid="${esc(u.uid)}">Edit</button></td>
                `;
-               
+
                const detailTr = document.createElement('tr');
                detailTr.className = 'user-detail';
                detailTr.id = `detail-${u.uid}`;
                const detailTd = document.createElement('td');
                detailTd.colSpan = 6;
-               
-               const roleDropdown = roleOptions.map(r => `<option value="${r}" ${r === currentRole ? 'selected' : ''}>${r}</option>`).join('');
+
+               // If the user has a role that's not in the list (legacy), keep it selectable
+               const roleChoices = roleOptions.includes(currentRole) ? roleOptions : [currentRole, ...roleOptions];
+               const roleDropdown = roleChoices.map(r => `<option value="${esc(r)}" ${r === currentRole ? 'selected' : ''}>${esc(r)}</option>`).join('');
                const classesText = Array.isArray(u.classes) ? u.classes.join(', ') : '';
-               
+
                detailTd.innerHTML = `
                  <div style="max-width:800px">
-                   <h3 style="margin:0 0 12px">Edit User: ${u.name || u.email || 'User'}</h3>
+                   <h3 style="margin:0 0 12px">Edit User: ${esc(u.name || u.email || 'User')}</h3>
                    <div class="field-row">
                      <label>Name</label>
-                     <input id="name-${u.uid}" value="${u.name || ''}" />
+                     <input id="name-${u.uid}" value="${esc(u.name || '')}" />
                    </div>
                    <div class="field-row">
                      <label>Email</label>
-                     <input id="email-${u.uid}" value="${u.email || ''}" disabled style="background:#f3f4f6;cursor:not-allowed" />
+                     <input id="email-${u.uid}" value="${esc(u.email || '')}" disabled style="background:#f3f4f6;cursor:not-allowed" />
                    </div>
                    <div class="field-row">
                      <label>Role</label>
@@ -730,7 +742,7 @@
                    </div>
                    <div class="field-row">
                      <label>Classes (comma-separated)</label>
-                     <textarea id="classes-${u.uid}" rows="3" placeholder="Geometry, AP Calculus AB, ...">${classesText}</textarea>
+                     <textarea id="classes-${u.uid}" rows="3" placeholder="Geometry, Honors Precalculus, ...">${esc(classesText)}</textarea>
                    </div>
                    <div style="display:flex;gap:8px;margin-top:12px">
                      <button class="btn primary" id="save-${u.uid}">Save All Changes</button>
@@ -740,30 +752,38 @@
                  </div>
                `;
                detailTr.appendChild(detailTd);
-               
+
                tbody.appendChild(tr);
                tbody.appendChild(detailTr);
-               
+
                tr.querySelector('.btn').addEventListener('click', () => {
                  const detail = document.getElementById(`detail-${u.uid}`);
                  detail.classList.toggle('open');
                });
-               
+
                const saveBtn = detailTd.querySelector(`#save-${u.uid}`);
                const cancelBtn = detailTd.querySelector(`#cancel-${u.uid}`);
                const deleteBtn = detailTd.querySelector(`#delete-${u.uid}`);
-               
+
                cancelBtn.addEventListener('click', () => {
                  document.getElementById(`detail-${u.uid}`).classList.remove('open');
                });
-               
+
                deleteBtn.addEventListener('click', async () => {
-                 if (!confirm(`Delete user ${u.name || u.email}? This will remove their Firestore data but NOT their Firebase Auth account (they can still sign in but will have no profile).`)) return;
+                 if (!confirm(`Delete user ${u.name || u.email}? This permanently removes their sign-in account and profile. Their sessions and hours are kept.`)) return;
                  deleteBtn.disabled = true;
                  deleteBtn.textContent = 'Deleting...';
                  try {
-                   await setDoc(doc(db, 'users', u.uid), { deleted: true, deletedAt: new Date().toISOString(), deletedBy: user.uid }, { merge: true });
-                   alert('User marked as deleted. To fully remove Firebase Auth account, use Firebase Console or Admin SDK.');
+                   try {
+                     const del = httpsCallable(functions, 'adminDeleteUser');
+                     await del({ uid: u.uid });
+                     alert('User deleted.');
+                   } catch (fnErr) {
+                     // Fall back to a soft delete if the function is unavailable
+                     console.warn('adminDeleteUser unavailable, soft-deleting instead', fnErr);
+                     await setDoc(doc(db, 'users', u.uid), { deleted: true, deletedAt: new Date().toISOString(), deletedBy: user.uid }, { merge: true });
+                     alert('Cloud Function unavailable (' + (fnErr.message || fnErr) + '). User was hidden (soft-deleted) instead; their sign-in account still exists.');
+                   }
                    renderUsers();
                  } catch (err) {
                    console.error('Delete error:', err);
@@ -772,7 +792,7 @@
                    deleteBtn.textContent = 'Delete User';
                  }
                });
-               
+
                saveBtn.addEventListener('click', async () => {
                  saveBtn.disabled = true;
                  saveBtn.textContent = 'Saving...';
@@ -782,14 +802,14 @@
                    const grade = document.getElementById(`grade-${u.uid}`).value;
                    const classesRaw = document.getElementById(`classes-${u.uid}`).value;
                    const classes = classesRaw.split(',').map(c => c.trim()).filter(Boolean);
-                   
+
                    await setDoc(doc(db, 'users', u.uid), {
                      name: name || null,
                      role: role,
                      grade: grade || null,
                      classes: classes
                    }, { merge: true });
-                   
+
                    saveBtn.textContent = '✓ Saved';
                    setTimeout(() => {
                      saveBtn.textContent = 'Save All Changes';
@@ -842,11 +862,11 @@
                snapshot.forEach(d => {
                  days.push({ id: d.id, ...d.data() });
                });
-               
+
                days.sort((a, b) => a.id.localeCompare(b.id));
-               
+
                if (days.length === 0) {
-                 dataDiv.innerHTML = '<p style="text-align:center;padding:24px;color:#6b7280">No cycle days in database. Click "Import All Days from XML" to import current data.</p>';
+                 dataDiv.innerHTML = '<p style="text-align:center;padding:24px;color:#6b7280">No cycle days in database. Click "Import from XML" to import current data.</p>';
                  return;
                }
 
@@ -857,7 +877,7 @@
                  const summary = d.summary || '-';
                  const periodCount = (d.periods || []).length;
                  const updated = d.updatedAt ? fmtDate(d.updatedAt.toDate ? d.updatedAt.toDate() : d.updatedAt) : '-';
-                 html += `<tr><td>${date}</td><td>${day}</td><td>${summary}</td><td>${periodCount} periods</td><td>${updated}</td></tr>`;
+                 html += `<tr><td>${esc(date)}</td><td>${esc(day)}</td><td>${esc(summary)}</td><td>${periodCount} periods</td><td>${esc(updated)}</td></tr>`;
                });
                html += '</tbody></table>';
                dataDiv.innerHTML = html;
@@ -869,7 +889,7 @@
 
            importBtn.addEventListener('click', async () => {
              if (!confirm('This will fetch all days from the school XML and save them to Firestore. Continue?')) return;
-             
+
              importBtn.disabled = true;
              importBtn.textContent = 'Importing...';
              statusDiv.style.display = 'block';
@@ -883,31 +903,31 @@
                const res = await fetch(url);
                const text = await res.text();
                const xml = new window.DOMParser().parseFromString(text, 'text/xml');
-               
+
                const calendarDays = Array.from(xml.getElementsByTagName('CalendarDay'));
                statusDiv.textContent = `Found ${calendarDays.length} days in XML. Saving to Firestore...`;
 
                let saved = 0;
                let skipped = 0;
                let totalPeriods = 0;
-               
+
                for (const dayNode of calendarDays) {
                  const dateStr = dayNode.getElementsByTagName('Date')[0]?.textContent.trim();
                  if (!dateStr) continue;
-                 
+
                  // Convert MM/DD/YYYY to YYYY-MM-DD for document ID
                  const [mm, dd, yyyy] = dateStr.split('/');
                  const docId = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-                 
+
                  const cycleDay = dayNode.getElementsByTagName('CycleDay')[0]?.textContent.trim() || null;
                  const summary = dayNode.getElementsByTagName('SchoolDayDescription')[0]?.textContent.trim() || null;
-                 
+
                  // Extract periods - check if they're children of the CalendarDay node
                  const periods = [];
-                 
+
                  // First try: direct Period children
                  let periodNodes = Array.from(dayNode.getElementsByTagName('Period'));
-                 
+
                  // If no periods found, try looking in a Periods container
                  if (periodNodes.length === 0) {
                    const periodsContainer = dayNode.getElementsByTagName('Periods')[0];
@@ -915,7 +935,7 @@
                      periodNodes = Array.from(periodsContainer.getElementsByTagName('Period'));
                    }
                  }
-                 
+
                  // If still no periods, try childNodes approach
                  if (periodNodes.length === 0 && dayNode.childNodes) {
                    for (let child of dayNode.childNodes) {
@@ -924,7 +944,7 @@
                      }
                    }
                  }
-                 
+
                  periodNodes.forEach(p => {
                    const code = p.getElementsByTagName('PeriodCode')[0]?.textContent.trim() || '';
                    const start = p.getElementsByTagName('StartTime')[0]?.textContent.trim() || '';
@@ -934,7 +954,7 @@
                      totalPeriods++;
                    }
                  });
-                 
+
                  try {
                    await setDoc(doc(db, 'cycleDays', docId), {
                      day: cycleDay,
@@ -943,7 +963,7 @@
                      updatedAt: serverTimestamp()
                    });
                    saved++;
-                   
+
                    // Log first few for debugging
                    if (saved <= 3) {
                      console.log(`${docId}: ${periods.length} periods`, periods);
@@ -958,7 +978,7 @@
                statusDiv.style.border = '1px solid #6ee7b7';
                statusDiv.style.color = '#065f46';
                statusDiv.textContent = `Import complete! Saved ${saved} days with ${totalPeriods} total periods. ${skipped > 0 ? 'Skipped ' + skipped + ' due to errors.' : ''} Check browser console for details.`;
-               
+
                await refreshCalendarView();
              } catch (err) {
                console.error(err);
@@ -968,14 +988,14 @@
                statusDiv.textContent = 'Import failed: ' + err.message;
              } finally {
                importBtn.disabled = false;
-               importBtn.textContent = 'Import All Days from XML';
+               importBtn.textContent = 'Import from XML';
              }
            });
 
            // One-time backfill script: populate periods for any day missing them, based on cycle day (1-6)
            backfillBtn.addEventListener('click', async () => {
              if (!confirm('Backfill all cycleDays that have no periods using the standard templates for Day 1-6? This will update existing docs.')) return;
- 
+
              backfillBtn.disabled = true;
              backfillBtn.textContent = 'Backfilling...';
              statusDiv.style.display = 'block';
@@ -983,7 +1003,7 @@
              statusDiv.style.border = '1px solid #dbeafe';
              statusDiv.style.color = '#1e40af';
              statusDiv.textContent = 'Scanning cycleDays...';
- 
+
              // Canonical period templates (times match the XML; date component is 1/1/1900)
              const t = {
                '1': [
@@ -1046,12 +1066,12 @@
                  { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
                ],
              };
- 
+
              try {
                const snap = await getDocs(collection(db, 'cycleDays'));
                let updated = 0;
                let skipped = 0;
- 
+
                for (const d of snap.docs) {
                  const id = d.id;
                  const data = d.data() || {};
@@ -1065,7 +1085,7 @@
                    skipped++;
                    continue;
                  }
- 
+
                  await setDoc(doc(db, 'cycleDays', id), {
                    periods: t[dayVal],
                    summary: data.summary || `US Day ${dayVal}`,
@@ -1073,7 +1093,7 @@
                  }, { merge: true });
                  updated++;
                }
- 
+
                statusDiv.style.background = '#d1fae5';
                statusDiv.style.border = '1px solid #6ee7b7';
                statusDiv.style.color = '#065f46';
@@ -1093,7 +1113,7 @@
 
            importIcsBtn.addEventListener('click', async () => {
              if (!confirm('This will attempt to import calendar data from an ICS feed. This might include historical dates. Continue?')) return;
-             
+
              importIcsBtn.disabled = true;
              importIcsBtn.textContent = 'Importing...';
              statusDiv.style.display = 'block';
@@ -1115,7 +1135,7 @@
 
              for (const url of possibleUrls) {
                try {
-                 statusDiv.innerHTML += `<br>Trying: ${url}...`;
+                 statusDiv.innerHTML += `<br>Trying: ${esc(url)}...`;
                  const res = await fetch(url + '?t=' + Math.random());
                  if (res.ok) {
                    const text = await res.text();
@@ -1130,7 +1150,7 @@
                    statusDiv.innerHTML += ` ❌ ${res.status}`;
                  }
                } catch (err) {
-                 statusDiv.innerHTML += ` ❌ ${err.message}`;
+                 statusDiv.innerHTML += ` ❌ ${esc(err.message)}`;
                }
              }
 
@@ -1146,42 +1166,42 @@
 
              // Parse ICS and import
              statusDiv.innerHTML += '<br><br>Parsing ICS data...';
-             
+
              try {
                const events = parseICS(found.text);
                console.log('ICS Parser found events:', events.slice(0, 5)); // Log first 5 for debugging
                statusDiv.innerHTML += `<br>Found ${events.length} events. Importing to Firestore...`;
-               
+
                let saved = 0;
                let skipped = 0;
                let updated = 0;
-               
+
                for (const evt of events) {
                  if (!evt.date || !evt.summary) {
                    skipped++;
                    continue;
                  }
-                 
+
                  // Extract cycle day from summary (e.g., "US Day 3")
                  const dayMatch = evt.summary.match(/Day\s+(\d+)/i);
                  const cycleDay = dayMatch ? dayMatch[1] : null;
-                 
+
                  if (!cycleDay) {
                    console.log('No cycle day found in:', evt.summary);
                    skipped++;
                    continue;
                  }
-                 
+
                  try {
                    // Check if already exists with periods
                    const docRef = doc(db, 'cycleDays', evt.date);
                    const existing = await getDoc(docRef);
-                   
+
                    if (existing.exists() && existing.data().periods && existing.data().periods.length > 0) {
                      skipped++; // Already has data, don't overwrite
                      continue;
                    }
-                   
+
                    // Save or update (merge to preserve existing periods if any)
                    await setDoc(docRef, {
                      day: cycleDay,
@@ -1189,7 +1209,7 @@
                      periods: [], // ICS doesn't have period details
                      updatedAt: serverTimestamp()
                    }, { merge: true });
-                   
+
                    if (existing.exists()) {
                      updated++;
                    } else {
@@ -1200,19 +1220,19 @@
                    skipped++;
                  }
                }
-               
+
                statusDiv.style.background = '#d1fae5';
                statusDiv.style.border = '1px solid #6ee7b7';
                statusDiv.style.color = '#065f46';
                statusDiv.innerHTML += `<br><br><strong>✓ Import complete!</strong><br>New: ${saved} days<br>Updated: ${updated} days<br>Skipped: ${skipped} (already had periods or missing info)<br><br><em>Note: ICS feeds contain cycle day info but not detailed period schedules. Historical dates will show the cycle day but won't have period-by-period schedules.</em>`;
-               
+
                await refreshCalendarView();
              } catch (err) {
                console.error(err);
                statusDiv.style.background = '#fee2e2';
                statusDiv.style.border = '1px solid #fecaca';
                statusDiv.style.color = '#991b1b';
-               statusDiv.innerHTML += `<br><br>❌ Failed to parse ICS: ${err.message}`;
+               statusDiv.innerHTML += `<br><br>❌ Failed to parse ICS: ${esc(err.message)}`;
              } finally {
                importIcsBtn.disabled = false;
                importIcsBtn.textContent = 'Import from ICS Feed';
@@ -1225,10 +1245,10 @@
              const unfolded = icsText.replace(/\r?\n[ \t]/g, '');
              const lines = unfolded.split(/\r?\n/);
              let currentEvent = null;
-             
+
              for (let i = 0; i < lines.length; i++) {
                const line = lines[i].trim();
-               
+
                if (line === 'BEGIN:VEVENT') {
                  currentEvent = {};
                } else if (line === 'END:VEVENT' && currentEvent) {
@@ -1254,7 +1274,7 @@
                  }
                }
              }
-             
+
              return events;
            }
 
@@ -1272,27 +1292,27 @@
                const res = await fetch(url);
                const text = await res.text();
                const xml = new window.DOMParser().parseFromString(text, 'text/xml');
-               
+
                const calendarDays = Array.from(xml.getElementsByTagName('CalendarDay'));
                const firstDay = calendarDays[0];
-               
+
                if (firstDay) {
                  const dateStr = firstDay.getElementsByTagName('Date')[0]?.textContent.trim() || 'N/A';
                  const cycleDay = firstDay.getElementsByTagName('CycleDay')[0]?.textContent.trim() || 'N/A';
                  const summary = firstDay.getElementsByTagName('SchoolDayDescription')[0]?.textContent.trim() || 'N/A';
-                 
+
                  // Count periods in first day
                  const periodNodes = Array.from(firstDay.getElementsByTagName('Period'));
-                 
+
                  statusDiv.style.background = '#f0fdf4';
                  statusDiv.style.border = '1px solid #86efac';
                  statusDiv.style.color = '#166534';
                  statusDiv.innerHTML = `
                    <strong>XML Structure Inspection:</strong><br>
                    Total CalendarDay elements: ${calendarDays.length}<br>
-                   First day date: ${dateStr}<br>
-                   First day cycle: ${cycleDay}<br>
-                   First day summary: ${summary}<br>
+                   First day date: ${esc(dateStr)}<br>
+                   First day cycle: ${esc(cycleDay)}<br>
+                   First day summary: ${esc(summary)}<br>
                    First day periods found: ${periodNodes.length}<br><br>
                    <details>
                      <summary>First CalendarDay XML (click to expand)</summary>
@@ -1313,7 +1333,7 @@
                statusDiv.textContent = 'Failed to fetch XML: ' + err.message;
              } finally {
                inspectBtn.disabled = false;
-               inspectBtn.textContent = 'Inspect XML Structure';
+               inspectBtn.textContent = 'Inspect XML';
              }
            });
 
@@ -1324,7 +1344,7 @@
            }
 
            refreshBtn.addEventListener('click', refreshCalendarView);
-           
+
            // Initial load
            await refreshCalendarView();
          }
@@ -1334,14 +1354,14 @@
            const container = panels.analytics;
            container.innerHTML = '<h2>Analytics & Reports</h2><div id="stats"></div><div style="margin-top:16px"><button id="exportCSV" class="btn primary">Export Sessions to CSV</button></div>';
            const stats = document.getElementById('stats');
-           
+
            // Compute stats
            const [reqSnap, sessSnap, usersSnap] = await Promise.all([
              getDocs(collection(db, 'Requests')),
              getDocs(collection(db, 'Sessions')),
              getDocs(collection(db, 'users'))
            ]);
-           
+
            const totalReqs = reqSnap.size;
            const totalSess = sessSnap.size;
            const totalUsers = usersSnap.size;
@@ -1351,7 +1371,7 @@
              const subj = s.subject || 'Unknown';
              bySubject[subj] = (bySubject[subj] || 0) + 1;
            });
-           
+
            const grid = document.createElement('div');
            grid.className = 'stat-grid';
            grid.innerHTML = `
@@ -1362,11 +1382,11 @@
            Object.keys(bySubject).sort().forEach(subj => {
              const card = document.createElement('div');
              card.className = 'stat-card';
-             card.innerHTML = `<div class="label">${subj} Sessions</div><div class="value" style="font-size:22px">${bySubject[subj]}</div>`;
+             card.innerHTML = `<div class="label">${esc(subj)} Sessions</div><div class="value" style="font-size:22px">${bySubject[subj]}</div>`;
              grid.appendChild(card);
            });
            stats.appendChild(grid);
-           
+
            document.getElementById('exportCSV').addEventListener('click', () => {
              const rows = [['Date','CycleDay','Block','Student','Email','Grade','Subject','Class','Topic','Location','Tutor','Status']];
              sessSnap.forEach(d => {

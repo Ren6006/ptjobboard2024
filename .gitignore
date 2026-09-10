@@ -64,3 +64,10 @@ node_modules/
 
 # dotenv environment variables file
 .env
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Emulator logs
+*-debug.log

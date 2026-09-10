@@ -241,6 +241,8 @@
               window.location.href = destination;
             }
           } catch (err) {
+            // Allow the user to try again
+            redirectHandled = false;
             errorBox.textContent =
               err && err.message ? err.message : "Login failed";
           }
