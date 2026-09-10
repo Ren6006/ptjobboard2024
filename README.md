@@ -16,11 +16,7 @@ approved for classes, set their availability, and claim requests as sessions.
 | `functions/index.js` | Cloud Functions (Gen 2, Node 22): emails, auto-approval, hours tracking, nightly session auto-complete, admin user create/delete | Yes |
 | `firestore.rules` | Firestore security rules | Yes |
 | `firebase.json`, `.firebaserc`, `firestore.indexes.json` | Firebase project config | Yes |
-| `database.rules.json` | Realtime Database rules (deny all; RTDB is not used) | Config only |
 | `SMTP_SETUP_README.md`, `functions/setup-smtp-secrets.ps1` | How to set the Gmail SMTP secrets for the email functions | Docs/tooling |
-| `package.json` (root) | Only pulls the `firebase` npm package; nothing in the site imports it (pages load the SDK from the gstatic CDN) | No |
-| `www.hw.com/` | A saved copy of the school's daily-schedule page and its fonts. Not served, not referenced by any code. | No |
-| `.DS_Store` | macOS junk that was committed by accident | No |
 
 ## Pages
 
