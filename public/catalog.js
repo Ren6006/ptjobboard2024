@@ -46,12 +46,21 @@
       "Honors Physics C: Electricity & Magnetism",
       "Other",
     ],
-    English: ["English II", "English III", "Honors English III", "Other"],
+    English: [
+      "English II",
+      "English III",
+      "Honors English III",
+      "Honors English Seminar",
+      "Creative Writing",
+      "Other",
+    ],
     History: [
       "Rise of The Modern World",
       "ROTW Art History",
       "Thematic US History",
       "Honors US History",
+      "Honors European History",
+      "Honors Middle East Studies",
       "Other",
     ],
     "World Language": [
