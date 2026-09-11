@@ -18,24 +18,24 @@ const db = getFirestore();
 const SMTP_USER = defineSecret("SMTP_USER");
 const SMTP_PASSWORD = defineSecret("SMTP_PASSWORD");
 
-// ---- Catalog (for friendly block names) ----
+// ---- Catalog (for friendly block names; keep in sync with public/catalog.js) ----
 const blocksCatalog = {
-  "1": "Block 1",
-  "M11": "Junior Seminar",
-  "2": "Block 2",
-  "L": "Lunch",
-  "3": "Block 3",
-  "DS": "DS",
-  "CC": "CC (3:15-4:00)",
-  "4": "Block 4",
-  "M10": "Soph. Seminar",
-  "5": "Block 5",
-  "6": "Block 6",
-  "7": "Block 7",
-  "FC": "Faculty Collaboration",
-  "M12": "Senior Seminar",
-  "CT": "Community Time",
-  "OH": "Office Hours",
+  A: "Block A",
+  B: "Block B",
+  C: "Block C",
+  D: "Block D",
+  E: "Block E",
+  F: "Block F",
+  G: "Block G",
+  L: "Lunch",
+  DS: "Directed Study",
+  CC: "Co-Curricular (3:15-4:00)",
+  M10: "Soph. Seminar",
+  M11: "Junior Seminar",
+  M12: "Senior Seminar",
+  FC: "Faculty Collaboration",
+  CT: "Community Time",
+  OH: "Office Hours",
 };
 
 // ---- SMTP Email Configuration ----

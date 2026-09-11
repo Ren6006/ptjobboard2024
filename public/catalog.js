@@ -106,34 +106,36 @@
     Other: ["Other"],
   };
 
-  // Block code -> friendly label
+  // Block code -> friendly label (2026-27: classes are lettered A-G;
+  // codes must match <PeriodCode> in the school's DailySchedulesUS.xml)
   const blocks = {
-    1: "Block 1",
-    M11: "Junior Seminar",
-    2: "Block 2",
+    A: "Block A",
+    B: "Block B",
+    C: "Block C",
+    D: "Block D",
+    E: "Block E",
+    F: "Block F",
+    G: "Block G",
     L: "Lunch",
-    3: "Block 3",
-    DS: "DS",
-    CC: "CC (3:15-4:00)",
-    4: "Block 4",
+    DS: "Directed Study",
+    CC: "Co-Curricular (3:15-4:00)",
     M10: "Soph. Seminar",
-    5: "Block 5",
-    6: "Block 6",
-    7: "Block 7",
-    FC: "Faculty Collaboration",
+    M11: "Junior Seminar",
     M12: "Senior Seminar",
+    FC: "Faculty Collaboration",
     CT: "Community Time",
     OH: "Office Hours",
   };
 
-  // Blocks that occur on each cycle day (Day 1..6), in schedule order.
+  // Blocks that occur on each cycle day (Day 1..6), in schedule order,
+  // per the 2026-27 schedule. The 15-minute Break (B1) is omitted.
   const dayBlocks = [
-    ["1", "M11", "2", "L", "3", "DS", "CC"],
-    ["4", "M10", "5", "L", "6", "7", "CC"],
-    ["FC", "2", "L", "3", "1", "CC"],
-    ["5", "M12", "6", "L", "7", "4", "CC"],
-    ["3", "CT", "1", "L", "2", "DS", "CC"],
-    ["6", "OH", "7", "L", "4", "5", "CC"],
+    ["A", "M12", "B", "L", "C", "DS", "CC"],
+    ["D", "M10", "E", "L", "F", "G", "CC"],
+    ["FC", "B", "L", "C", "A", "CC"],
+    ["E", "OH", "F", "L", "G", "D", "CC"],
+    ["C", "CT", "A", "L", "B", "DS", "CC"],
+    ["F", "M11", "G", "L", "D", "E", "CC"],
   ];
 
   // Roles an admin can assign in the console

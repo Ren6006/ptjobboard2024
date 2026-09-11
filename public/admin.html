@@ -638,8 +638,42 @@
          // ========== TAB 5: USERS & ROLES ==========
          async function loadUsers() {
            const container = panels.users;
-           container.innerHTML = '<h2>Users & Roles</h2><p style="color:#6b7280;font-size:14px">Click Edit to modify user details, or Add User to create a new account.</p><div class="filters"><input id="filterUserSearch" placeholder="Search by name/email..." /><button id="refreshUsers">Refresh</button><button id="addUser" class="btn primary" style="margin-left:auto">+ Add User</button></div><div id="usersList"></div>';
+           container.innerHTML = '<h2>Users & Roles</h2><p style="color:#6b7280;font-size:14px">Click Edit to modify user details, or Add User to create a new account.</p>'
+             + '<div class="filters"><input id="filterUserSearch" placeholder="Search by name/email..." /><button id="refreshUsers">Refresh</button>'
+             + '<label style="margin-left:auto;display:flex;align-items:center;gap:6px;color:#6b7280;font-size:14px">Quick view: who tutors <select id="classQuickView"><option value="">— pick a class —</option></select></label>'
+             + '<button id="addUser" class="btn primary">+ Add User</button></div>'
+             + '<div id="classQuickList" style="display:none;margin:0 0 12px;padding:12px;border:1px solid #dbeafe;background:#eff6ff;border-radius:8px"></div>'
+             + '<div id="usersList"></div>';
            const filterUser = document.getElementById('filterUserSearch');
+           const classQuickView = document.getElementById('classQuickView');
+           const classQuickList = document.getElementById('classQuickList');
+           let lastUsers = [];
+
+           // Populate the class dropdown once, grouped by subject
+           Object.keys(CATALOG.subjects).forEach(subj => {
+             const og = document.createElement('optgroup'); og.label = subj;
+             CATALOG.subjects[subj].forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; og.appendChild(o); });
+             classQuickView.appendChild(og);
+           });
+
+           // View-only: list every tutor approved for the chosen class
+           function renderQuickView() {
+             const cls = classQuickView.value;
+             if (!cls) { classQuickList.style.display = 'none'; classQuickList.innerHTML = ''; return; }
+             const tutors = lastUsers
+               .filter(u => Array.isArray(u.classes) && u.classes.includes(cls))
+               .sort((a, b) => String(a.name || a.email).localeCompare(String(b.name || b.email)));
+             classQuickList.style.display = 'block';
+             if (tutors.length === 0) {
+               classQuickList.innerHTML = `<strong>${esc(cls)}</strong>: no approved tutors.`;
+               return;
+             }
+             classQuickList.innerHTML = `<div style="margin-bottom:8px"><strong>${esc(cls)}</strong> — ${tutors.length} tutor${tutors.length !== 1 ? 's' : ''}</div>`
+               + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px">'
+               + tutors.map(u => `<div style="font-size:13px">${esc(u.name || '—')} <span style="color:#6b7280">• ${esc(u.email || '')}${u.grade ? ' • Gr ' + esc(u.grade) : ''}</span>${u.role && u.role !== 'student' ? ` <span class="pill">${esc(u.role)}</span>` : ''}</div>`).join('')
+               + '</div>';
+           }
+           classQuickView.addEventListener('change', renderQuickView);
            const usersList = document.getElementById('usersList');
            document.getElementById('refreshUsers').addEventListener('click', renderUsers);
 
@@ -676,6 +710,9 @@
                if (!u.deleted) items.push({ uid: d.id, ...u });
              });
 
+             lastUsers = items;
+             renderQuickView();
+
              let filtered = items;
              const userFilter = filterUser.value.toLowerCase().trim();
              if (userFilter) filtered = filtered.filter(u => (u.name||'').toLowerCase().includes(userFilter) || (u.email||'').toLowerCase().includes(userFilter));
@@ -693,7 +730,18 @@
              filtered.forEach((u, idx) => {
                const tr = document.createElement('tr');
                tr.className = 'user-row';
-               const classes = Array.isArray(u.classes) ? u.classes.slice(0,3).join(', ') + (u.classes.length > 3 ? '...' : '') : (u.classes||'—');
+               // View-only class list: collapsed count, expand to see all (grouped by subject)
+               const classList = Array.isArray(u.classes) ? u.classes : [];
+               let classes;
+               if (classList.length === 0) {
+                 classes = '—';
+               } else {
+                 const bySubject = {};
+                 classList.forEach(c => { const s = CATALOG.subjectOfClass(c) || 'Other'; (bySubject[s] = bySubject[s] || []).push(c); });
+                 classes = `<details><summary style="cursor:pointer;color:#1a57d6">${classList.length} class${classList.length !== 1 ? 'es' : ''}</summary>`
+                   + Object.keys(bySubject).map(s => `<div style="margin-top:4px"><strong>${esc(s)}:</strong> ${bySubject[s].map(esc).join(', ')}</div>`).join('')
+                   + '</details>';
+               }
                const currentRole = u.role || 'student';
 
                tr.innerHTML = `
@@ -701,7 +749,7 @@
                  <td>${esc(u.email || '—')}</td>
                  <td><span class="pill">${esc(currentRole)}</span></td>
                  <td>${esc(u.grade || '—')}</td>
-                 <td style="font-size:12px;color:#6b7280">${esc(classes)}</td>
+                 <td style="font-size:12px;color:#6b7280">${classes}</td>
                  <td><button class="btn" data-uid="${esc(u.uid)}">Edit</button></td>
                `;
 
@@ -1004,66 +1052,66 @@
              statusDiv.style.color = '#1e40af';
              statusDiv.textContent = 'Scanning cycleDays...';
 
-             // Canonical period templates (times match the XML; date component is 1/1/1900)
+             // Canonical period templates for 2026-27 (blocks A-G; times match the XML; date component is 1/1/1900)
              const t = {
                '1': [
-                 { code: '1',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
-                 { code: 'M11',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:25:00 AM' },
-                 { code: '2',  start: '1/1/1900 10:30:00 AM', end: '1/1/1900 11:45:00 AM' },
-                 { code: 'L',  start: '1/1/1900 11:45:00 AM', end: '1/1/1900 12:45:00 PM' },
-                 { code: '3',  start: '1/1/1900 12:45:00 PM', end: '1/1/1900 2:00:00 PM' },
-                 { code: 'B1', start: '1/1/1900 2:00:00 PM',  end: '1/1/1900 2:15:00 PM' },
-                 { code: 'DS', start: '1/1/1900 2:15:00 PM',  end: '1/1/1900 3:00:00 PM' },
-                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+                 { code: 'A', start: '1/1/1900 8:00:00 AM', end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M12', start: '1/1/1900 9:20:00 AM', end: '1/1/1900 10:25:00 AM' },
+                 { code: 'B', start: '1/1/1900 10:30:00 AM', end: '1/1/1900 11:45:00 AM' },
+                 { code: 'L', start: '1/1/1900 11:45:00 AM', end: '1/1/1900 12:45:00 PM' },
+                 { code: 'C', start: '1/1/1900 12:45:00 PM', end: '1/1/1900 2:00:00 PM' },
+                 { code: 'B1', start: '1/1/1900 2:00:00 PM', end: '1/1/1900 2:15:00 PM' },
+                 { code: 'DS', start: '1/1/1900 2:15:00 PM', end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM', end: '1/1/1900 4:00:00 PM' },
                ],
                '2': [
-                 { code: '4',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
-                 { code: 'M10',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 9:55:00 AM' },
-                 { code: '5',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
-                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
-                 { code: '6',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
-                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
-                 { code: '7',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
-                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+                 { code: 'D', start: '1/1/1900 8:00:00 AM', end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M10', start: '1/1/1900 9:20:00 AM', end: '1/1/1900 9:55:00 AM' },
+                 { code: 'E', start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L', start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: 'F', start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM', end: '1/1/1900 1:45:00 PM' },
+                 { code: 'G', start: '1/1/1900 1:45:00 PM', end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM', end: '1/1/1900 4:00:00 PM' },
                ],
                '3': [
-                 { code: 'FC', start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:50:00 AM' },
-                 { code: '2',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
-                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
-                 { code: '3',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
-                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
-                 { code: '1',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
-                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+                 { code: 'FC', start: '1/1/1900 8:00:00 AM', end: '1/1/1900 9:50:00 AM' },
+                 { code: 'B', start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L', start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: 'C', start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM', end: '1/1/1900 1:45:00 PM' },
+                 { code: 'A', start: '1/1/1900 1:45:00 PM', end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM', end: '1/1/1900 4:00:00 PM' },
                ],
                '4': [
-                 { code: '5',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
-                 { code: 'M12',start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 9:55:00 AM' },
-                 { code: '6',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
-                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
-                 { code: '7',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
-                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
-                 { code: '4',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
-                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+                 { code: 'E', start: '1/1/1900 8:00:00 AM', end: '1/1/1900 9:15:00 AM' },
+                 { code: 'OH', start: '1/1/1900 9:20:00 AM', end: '1/1/1900 10:00:00 AM' },
+                 { code: 'F', start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L', start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: 'G', start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM', end: '1/1/1900 1:45:00 PM' },
+                 { code: 'D', start: '1/1/1900 1:45:00 PM', end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM', end: '1/1/1900 4:00:00 PM' },
                ],
                '5': [
-                 { code: '3',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
-                 { code: 'CT', start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:25:00 AM' },
-                 { code: '1',  start: '1/1/1900 10:30:00 AM', end: '1/1/1900 11:45:00 AM' },
-                 { code: 'L',  start: '1/1/1900 11:45:00 AM', end: '1/1/1900 12:45:00 PM' },
-                 { code: '2',  start: '1/1/1900 12:45:00 PM', end: '1/1/1900 2:00:00 PM' },
-                 { code: 'B1', start: '1/1/1900 2:00:00 PM',  end: '1/1/1900 2:15:00 PM' },
-                 { code: 'DS', start: '1/1/1900 2:15:00 PM',  end: '1/1/1900 3:00:00 PM' },
-                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+                 { code: 'C', start: '1/1/1900 8:00:00 AM', end: '1/1/1900 9:15:00 AM' },
+                 { code: 'CT', start: '1/1/1900 9:20:00 AM', end: '1/1/1900 10:25:00 AM' },
+                 { code: 'A', start: '1/1/1900 10:30:00 AM', end: '1/1/1900 11:45:00 AM' },
+                 { code: 'L', start: '1/1/1900 11:45:00 AM', end: '1/1/1900 12:45:00 PM' },
+                 { code: 'B', start: '1/1/1900 12:45:00 PM', end: '1/1/1900 2:00:00 PM' },
+                 { code: 'B1', start: '1/1/1900 2:00:00 PM', end: '1/1/1900 2:15:00 PM' },
+                 { code: 'DS', start: '1/1/1900 2:15:00 PM', end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM', end: '1/1/1900 4:00:00 PM' },
                ],
                '6': [
-                 { code: '6',  start: '1/1/1900 8:00:00 AM',  end: '1/1/1900 9:15:00 AM' },
-                 { code: 'OH', start: '1/1/1900 9:20:00 AM',  end: '1/1/1900 10:00:00 AM' },
-                 { code: '7',  start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
-                 { code: 'L',  start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
-                 { code: '4',  start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
-                 { code: 'B1', start: '1/1/1900 1:30:00 PM',  end: '1/1/1900 1:45:00 PM' },
-                 { code: '5',  start: '1/1/1900 1:45:00 PM',  end: '1/1/1900 3:00:00 PM' },
-                 { code: 'CC', start: '1/1/1900 3:15:00 PM',  end: '1/1/1900 4:00:00 PM' },
+                 { code: 'F', start: '1/1/1900 8:00:00 AM', end: '1/1/1900 9:15:00 AM' },
+                 { code: 'M11', start: '1/1/1900 9:20:00 AM', end: '1/1/1900 9:55:00 AM' },
+                 { code: 'G', start: '1/1/1900 10:00:00 AM', end: '1/1/1900 11:15:00 AM' },
+                 { code: 'L', start: '1/1/1900 11:15:00 AM', end: '1/1/1900 12:15:00 PM' },
+                 { code: 'D', start: '1/1/1900 12:15:00 PM', end: '1/1/1900 1:30:00 PM' },
+                 { code: 'B1', start: '1/1/1900 1:30:00 PM', end: '1/1/1900 1:45:00 PM' },
+                 { code: 'E', start: '1/1/1900 1:45:00 PM', end: '1/1/1900 3:00:00 PM' },
+                 { code: 'CC', start: '1/1/1900 3:15:00 PM', end: '1/1/1900 4:00:00 PM' },
                ],
              };
 
