@@ -1112,7 +1112,7 @@
            });
 
            importIcsBtn.addEventListener('click', async () => {
-             if (!confirm('This will attempt to import calendar data from an ICS feed. This might include historical dates. Continue?')) return;
+             if (!confirm('Import cycle days for the whole school year from the school ICS feed? Days that already have period times are left alone.')) return;
 
              importIcsBtn.disabled = true;
              importIcsBtn.textContent = 'Importing...';
@@ -1122,13 +1122,9 @@
              statusDiv.style.color = '#1e40af';
              statusDiv.innerHTML = 'Searching for ICS feeds...';
 
+             // School cycle-day feed (published as webcal://www.hw.com/calendar/cycledaysUS.ics)
              const possibleUrls = [
-               'https://www.hw.com/calendar/cycledaysUS.ics',  // The actual ICS feed
-               'https://www.hw.com/portals/0/reports/DailySchedulesUS.ics',
-               'https://www.hw.com/calendar.ics',
-               'https://www.hw.com/fs/elements/calendar.ics',
-               'https://calendar.hw.com/calendar.ics',
-               'https://www.hw.com/portals/0/calendar.ics'
+               'https://www.hw.com/calendar/cycledaysUS.ics',
              ];
 
              let found = null;
@@ -1158,7 +1154,7 @@
                statusDiv.style.background = '#fee2e2';
                statusDiv.style.border = '1px solid #fecaca';
                statusDiv.style.color = '#991b1b';
-               statusDiv.innerHTML += '<br><br><strong>❌ No ICS feed found.</strong><br>The school does not appear to publish an ICS calendar feed. Historical dates are not available via this method.';
+               statusDiv.innerHTML += '<br><br><strong>❌ Could not load the ICS feed.</strong><br>Check that https://www.hw.com/calendar/cycledaysUS.ics still exists (the school changes it each year).';
                importIcsBtn.disabled = false;
                importIcsBtn.textContent = 'Import from ICS Feed';
                return;
