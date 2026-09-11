@@ -71,3 +71,6 @@ Thumbs.db
 
 # Emulator logs
 *-debug.log
+
+# Rosters contain personal info; never commit
+*.csv
