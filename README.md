@@ -14,6 +14,7 @@ approved for classes, set their availability, and claim requests as sessions.
 | `public/firebase-config.js` | Public Firebase web config (not a secret) | Yes |
 | `public/common-auth.js` | Redirects every host to the canonical `hwptjb.com` | Yes |
 | `functions/index.js` | Cloud Functions (Gen 2, Node 22): emails, auto-approval, hours tracking, nightly session auto-complete, admin user create/delete | Yes |
+| `functions/email.js` | Gmail SMTP sending (nodemailer), shared by all email functions and usable directly for a test send | Yes |
 | `firestore.rules` | Firestore security rules | Yes |
 | `firebase.json`, `.firebaserc`, `firestore.indexes.json` | Firebase project config | Yes |
 | `SMTP_SETUP_README.md`, `functions/setup-smtp-secrets.ps1` | How to set the Gmail SMTP secrets for the email functions | Docs/tooling |

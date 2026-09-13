@@ -7,7 +7,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";   // Admin init for ref.get()
 import { getAuth } from "firebase-admin/auth";
-import nodemailer from "nodemailer";
+import { sendEmailWith } from "./email.js";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 // ---- Init Admin (once) ----
@@ -38,46 +38,18 @@ const blocksCatalog = {
   OH: "Office Hours",
 };
 
-// ---- SMTP Email Configuration ----
-// Creates a nodemailer transporter for sending emails via Gmail SMTP
-function createEmailTransporter() {
-  const smtpUser = (SMTP_USER.value() || process.env.SMTP_USER || "uspeertutoring@gmail.com").trim();
-  const smtpPassword = (SMTP_PASSWORD.value() || process.env.SMTP_PASSWORD || "").trim();
-  
-  console.log("SMTP Config:", {
-    user: smtpUser,
-    passwordLength: smtpPassword.length
-  });
-  
-  return nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false, // Use STARTTLS
-    auth: {
-      user: smtpUser,
-      pass: smtpPassword,
-    },
-  });
+// ---- Email (Gmail SMTP via nodemailer, see email.js) ----
+// Secret values are only readable inside a running function, so resolve
+// them per call.
+function smtpCredentials() {
+  return {
+    user: (SMTP_USER.value() || "uspeertutoring@gmail.com").trim(),
+    pass: (SMTP_PASSWORD.value() || "").trim(),
+  };
 }
 
-// ---- Helper: Send Email via SMTP ----
-// Sends an email using the SMTP transporter
-async function sendEmail({ from, to, subject, text }) {
-  const transporter = createEmailTransporter();
-  
-  try {
-    const info = await transporter.sendMail({
-      from,
-      to,
-      subject,
-      text,
-    });
-    console.log("Email sent successfully:", info.messageId);
-    return info;
-  } catch (error) {
-    console.error("Failed to send email:", error);
-    throw error;
-  }
+async function sendEmail(message) {
+  return sendEmailWith(smtpCredentials(), message);
 }
 
 // ---- Firestore Trigger (Gen2) ----
