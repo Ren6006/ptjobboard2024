@@ -28,6 +28,9 @@ The following Cloud Functions now use SMTP:
 - `confirmSessionEmail` - Sends session confirmation emails
 - `onClassRequestCreated` - Sends class request notifications
 - `onClassRequestApproved` - Sends approval confirmation emails
+- `onTutoringRequestCreated` - Notifies every matching tutor of a new student request
+- `onSessionCancelled` - Tells the student and the admin address a session was cancelled
+- `sendPasswordReset` - Sends the password reset link (see `STATUS.md`)
 
 ## Setup Instructions
 

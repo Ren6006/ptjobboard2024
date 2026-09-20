@@ -13,7 +13,7 @@ approved for classes, set their availability, and claim requests as sessions.
 | `public/catalog.js` | Single source of truth for subjects, classes, blocks, roles. Student form and tutor approvals must use the same class names to match. | Yes |
 | `public/firebase-config.js` | Public Firebase web config (not a secret) | Yes |
 | `public/common-auth.js` | Redirects every host to the canonical `hwptjb.com` | Yes |
-| `functions/index.js` | Cloud Functions (Gen 2, Node 22): emails, auto-approval, hours tracking, nightly session auto-complete, admin user create/delete | Yes |
+| `functions/index.js` | Cloud Functions (Gen 2, Node 22): emails, auto-approval, hours tracking, nightly session auto-complete, admin user create/delete, password reset links | Yes |
 | `functions/email.js` | Gmail SMTP sending (nodemailer), shared by all email functions and usable directly for a test send | Yes |
 | `firestore.rules` | Firestore security rules | Yes |
 | `firebase.json`, `.firebaserc`, `firestore.indexes.json` | Firebase project config | Yes |
@@ -26,6 +26,7 @@ approved for classes, set their availability, and claim requests as sessions.
 | `index.html` | Everyone | Landing: student / tutor / admin buttons |
 | `request.html` | Students (anonymous) | Submit a request with availability slots; reads the school XML schedule (cached in `cycleDays`) |
 | `signin.html`, `signup.html` | Tutors | Email/password auth, `@hwemail.com` / `@hw.com` only |
+| `reset-password.html` | Tutors | Forgot-password flow: request the reset email, then (via the emailed link, `?mode=resetPassword&oobCode=…`) choose a new password. The email is sent by the `sendPasswordReset` function over Gmail SMTP, not by Firebase Auth, whose own mailer delivers nothing for this project and whose action URL cannot be changed. The function mints the link with the Admin SDK and repoints it at this page. |
 | `board.html` | Tutors | Upcoming/completed sessions, matching open requests, self-reported hours; Lead Console for `<Subject> Lead` and `Head` |
 | `account.html` | Tutors | Name, grade, availability grid, request class approvals |
 | `admin.html` | `Admin`, `Head`, `Developer` | Approvals, requests, sessions, hours, users & roles, calendar import, analytics |
@@ -38,6 +39,7 @@ approved for classes, set their availability, and claim requests as sessions.
 - `Sessions`: `scheduled | completed | cancelled`; completed sessions create an `Hours` doc
 - `Hours`: one doc per hour (`completed_session` or `self_reported`)
 - `cycleDays/{YYYY-MM-DD}`: cached school schedule (imported from the Admin > Calendar tab)
+- `PasswordResetThrottle/{email}`: one doc per address, the cooldown behind `sendPasswordReset`; written only by the Admin SDK and unreadable by any client
 
 ## Roles
 
@@ -58,7 +60,8 @@ Email functions need `SMTP_USER` / `SMTP_PASSWORD` in the environment when runni
 ```powershell
 firebase deploy --only hosting
 firebase deploy --only firestore:rules
-firebase deploy --only functions
+# The longer discovery timeout is required on a cold cache; see STATUS.md.
+$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"; firebase deploy --only functions
 ```
 
 Set the SMTP secrets once with `functions/setup-smtp-secrets.ps1` (it prompts for the app password; never commit it).

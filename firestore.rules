@@ -135,6 +135,15 @@ service cloud.firestore {
       allow write: if isAdminTier();
     }
 
+    // --- PasswordResetThrottle/{email} (reset email cooldown) --------------
+    // Written only by the sendPasswordReset function through the Admin SDK,
+    // which bypasses these rules. No client may read or write it; a readable
+    // cooldown record would leak which addresses have accounts.
+    match /PasswordResetThrottle/{email} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // Deny everything else
     match /{document=**} {
       allow read: if false;

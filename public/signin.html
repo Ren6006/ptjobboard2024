@@ -119,7 +119,7 @@
         <div id="error" class="error"></div>
         <div id="info" class="info"></div>
         <div class="link" style="margin-top:8px">
-          <a href="#" id="forgotPasswordLink">Forgot your password?</a>
+          <a href="reset-password.html" id="forgotPasswordLink">Forgot your password?</a>
         </div>
       </form>
       <div class="link">No account? <a href="signup.html">Sign up</a></div>
@@ -248,34 +248,23 @@
           }
         });
       
-      // Forgot password handler
+      // Forgot password: go to the dedicated reset page, carrying any email
+      // the user already typed so they don't have to re-enter it.
       document
         .getElementById("forgotPasswordLink")
-        .addEventListener("click", async function (e) {
+        .addEventListener("click", function (e) {
           e.preventDefault();
-          const emailEl = document.getElementById("email");
-          const email = (emailEl ? emailEl.value : "").trim();
-          const errorBox = document.getElementById("error");
-          const infoBox = document.getElementById("info");
-          errorBox.textContent = "";
-          infoBox.textContent = "";
-          if (!email) {
-            errorBox.textContent = "Enter your email above to reset your password.";
-            return;
-          }
-          if (!(email.endsWith("@hwemail.com") || email.endsWith("@hw.com"))) {
-            errorBox.textContent = "Please use your @hwemail.com or @hw.com email.";
-            return;
-          }
-          try {
-            await auth.sendPasswordResetEmail(email);
-            infoBox.textContent =
-              "Password reset link sent to " + email + ". Check your inbox. Keep in mind that it may take a few minutes to arrive.";
-          } catch (err) {
-            errorBox.textContent =
-              err && err.message ? err.message : "Failed to send reset email";
-          }
+          const email = document.getElementById("email").value.trim();
+          const url = new URL("reset-password.html", window.location.href);
+          if (email) url.searchParams.set("email", email);
+          window.location.href = url.toString();
         });
+
+      // Coming back from a successful password reset
+      if (params.get("reset") === "done") {
+        document.getElementById("info").textContent =
+          "Your password was updated. Sign in with your new password.";
+      }
     </script>
   </body>
 </html>

@@ -663,3 +663,100 @@ export const adminDeleteUser = onCall(
     return { ok: true };
   }
 );
+
+// ---- Password reset (callable from reset-password.html) ----
+// Firebase Auth's own mailer accepts the send and delivers nothing for this
+// project, and the custom action URL cannot be set (the console errors and the
+// Identity Toolkit API returns EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED). So we mint
+// the link ourselves, repoint it at our own page, and send it over the same
+// Gmail SMTP path the other notifications use.
+const RESET_PAGE_URL = "https://hwptjb.com/reset-password";
+const RESET_COOLDOWN_MS = 60 * 1000;
+
+export const sendPasswordReset = onCall(
+  { region: "us-central1", secrets: [SMTP_USER, SMTP_PASSWORD] },
+  async (request) => {
+    const email = String(request.data?.email || "").trim().toLowerCase();
+    if (!ALLOWED_EMAIL_RE.test(email)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Please use your @hwemail.com or @hw.com email."
+      );
+    }
+
+    // At most one email per address per minute. Throttled callers get the same
+    // success the real path returns, so this cannot be used to probe either.
+    const throttleRef = db.collection("PasswordResetThrottle").doc(email);
+    try {
+      const snap = await throttleRef.get();
+      const lastSent = snap.exists ? snap.data()?.last_sent_at?.toMillis?.() ?? 0 : 0;
+      if (Date.now() - lastSent < RESET_COOLDOWN_MS) {
+        console.log(`Password reset throttled for ${email}`);
+        return { ok: true };
+      }
+      await throttleRef.set({ last_sent_at: FieldValue.serverTimestamp() }, { merge: true });
+    } catch (err) {
+      // A throttle failure must not block a legitimate reset.
+      console.error("Password reset throttle check failed", err);
+    }
+
+    let link;
+    try {
+      link = await getAuth().generatePasswordResetLink(email, {
+        url: "https://hwptjb.com/signin.html?reset=done",
+      });
+    } catch (err) {
+      // Never reveal whether an account exists. Identity Toolkit reports an
+      // unknown address two different ways: the documented user-not-found
+      // code, or — as this project actually does — HTTP 200 carrying a
+      // GetOobConfirmationCodeResponse with no oobLink, which the Admin SDK
+      // surfaces as a generic auth/internal-error. Both mean "no such user".
+      const body = err?.httpResponse?.data;
+      const missingLink =
+        err?.code === "auth/internal-error" &&
+        body?.kind === "identitytoolkit#GetOobConfirmationCodeResponse" &&
+        !body?.oobLink;
+      if (
+        err?.code === "auth/user-not-found" ||
+        err?.code === "auth/email-not-found" ||
+        missingLink
+      ) {
+        console.log(`Password reset requested for unknown address ${email}`);
+        return { ok: true };
+      }
+      console.error("generatePasswordResetLink failed", err);
+      throw new HttpsError("internal", "Could not generate a reset link. Please try again.");
+    }
+
+    // Keep the query parameters (mode, oobCode, apiKey, continueUrl) and swap
+    // the base onto our page, which reads mode and oobCode and uses its own
+    // web config.
+    const ourLink = new URL(RESET_PAGE_URL);
+    new URL(link).searchParams.forEach((value, key) => {
+      ourLink.searchParams.set(key, value);
+    });
+
+    const subject = "Reset your HW Peer Tutoring password";
+    const text = `Hello,
+
+Open this link to choose a new password for your HW Peer Tutoring account:
+
+${ourLink.toString()}
+
+The link expires in one hour and can only be used once.
+
+If you did not ask to reset your password, you can ignore this email.
+
+HW Peer Tutoring`;
+
+    try {
+      await sendEmail({ to: email, subject, text });
+      console.log(`Password reset email sent to ${email}`);
+    } catch (err) {
+      console.error(`Failed to send password reset email to ${email}`, err);
+      throw new HttpsError("internal", "Could not send the reset email. Please try again.");
+    }
+
+    return { ok: true };
+  }
+);
