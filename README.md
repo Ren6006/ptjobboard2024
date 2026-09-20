@@ -17,7 +17,12 @@ approved for classes, set their availability, and claim requests as sessions.
 | `functions/email.js` | Gmail SMTP sending (nodemailer), shared by all email functions and usable directly for a test send | Yes |
 | `firestore.rules` | Firestore security rules | Yes |
 | `firebase.json`, `.firebaserc`, `firestore.indexes.json` | Firebase project config | Yes |
-| `SMTP_SETUP_README.md`, `functions/setup-smtp-secrets.ps1` | How to set the Gmail SMTP secrets for the email functions | Docs/tooling |
+| `functions/setup-smtp-secrets.ps1` | Prompts for the Gmail app password and writes the SMTP secrets | Tooling |
+| `tests/` | Automated tests. Currently one suite, for the password reset pipeline | Tooling |
+| `STATUS.md` | Where the project stands, open items, and how it got here | Docs |
+| `docs/EMAIL.md` | Mail pipeline, password reset, secret rotation, troubleshooting | Docs |
+| `docs/TESTING.md` | What is tested, how to run it, what has no coverage | Docs |
+| `docs/DEPLOY.md` | Deploy commands and the recurring gotchas | Docs |
 
 ## Pages
 
@@ -60,8 +65,20 @@ Email functions need `SMTP_USER` / `SMTP_PASSWORD` in the environment when runni
 ```powershell
 firebase deploy --only hosting
 firebase deploy --only firestore:rules
-# The longer discovery timeout is required on a cold cache; see STATUS.md.
+# The longer discovery timeout is required on a cold cache; see docs/DEPLOY.md.
 $env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"; firebase deploy --only functions
 ```
 
-Set the SMTP secrets once with `functions/setup-smtp-secrets.ps1` (it prompts for the app password; never commit it).
+Run the three separately; combining targets has silently skipped one. Full deploy notes and the
+recurring gotchas are in [docs/DEPLOY.md](docs/DEPLOY.md).
+
+Set the SMTP secrets with `functions/setup-smtp-secrets.ps1` (it prompts for the app password;
+never commit it, and never pipe it on a command line). See [docs/EMAIL.md](docs/EMAIL.md).
+
+## Tests
+
+```powershell
+node --test tests/password-reset.test.mjs
+```
+
+See [docs/TESTING.md](docs/TESTING.md) for what is and is not covered.
