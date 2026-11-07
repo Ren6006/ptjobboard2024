@@ -1,7 +1,7 @@
 # Project status
 
 The HW Peer Tutoring job board (`ptjobboard2024`, live at hwptjb.com) after the 2026-27
-start-of-year work. Last updated 2026-09-20.
+start-of-year work. Last updated 2026-11-06.
 
 This file is the **snapshot**: what is true right now, what is still open, and how it got here.
 Anything you will need to look up again lives in its own document:
@@ -101,6 +101,34 @@ set their availability.
 
 ## 3. What happened this cycle
 
+### Music tutoring and open sign-up (2026-11-06)
+
+**Music is a subject** in `public/catalog.js` with 19 instruments and areas (no "Other": class
+names are the matching key across subjects, so it would collide). Everything that reads the
+catalog picked it up: the account page, the request form (its subject list is now built from the
+catalog instead of hard-coded), the admin class view, and a new **Music Lead** role. Music
+requests left without a location default to "Music Rooms (1st floor Chalmers)". Notification
+emails need no change; they match on class name and free block like every other subject.
+One tutor holds the Music Lead role (set directly in Firestore); there is no music faculty
+lead, and the Admin remains the overall faculty contact.
+
+**Sign-up was always open** to any `@hwemail.com` / `@hw.com` address; there was never an
+allowlist. Approval of classes is the gate. Three fixes make that work:
+
+- `signup.html` redirected before its profile write finished, so self-signed-up tutors had no
+  name or `created_at`. Fixed, and the two damaged profiles were repaired from Auth.
+  `signin.html` now backfills a missing name too.
+- A tutor with **no approved classes saw every open request** that fit their blocks, and could
+  claim it. Now they see a prompt to request classes on My Account instead.
+- The board **skipped the Lead Console whenever there were no open requests** (an early
+  `return`), so leads could not approve classes on a quiet day. Fixed.
+
+New sign-ups land on the account page with a short welcome explaining the two steps. Covered by
+`tests/signup-flow.test.mjs`, see [docs/TESTING.md](docs/TESTING.md). Still open: any HW student
+who signs up can read every open request (names, emails) and update Sessions; the rules only
+check that someone is signed in. Tightening that to tutors with an approved class is the next
+step if sign-up is advertised widely.
+
 ### Password reset (2026-09-15 to 2026-09-20)
 
 Firebase Auth's mailer delivers nothing for this project and its action URL cannot be changed by
@@ -197,3 +225,5 @@ dependency.
 | 2026-09-20 | Deploy failure traced to the 10s discovery timeout on cold module load, not a code error |
 | 2026-09-20 | `sendPasswordReset` built and deployed; reset page switched to it; enumeration leak found and fixed; real reset email confirmed received at an `@hwemail.com` address; tests added to the repo |
 | 2026-09-20 | Docs split: `PASSWORD_RESET_STATUS.md` and `SMTP_SETUP_README.md` merged into `docs/` and deleted |
+| 2026-10-14, 2026-10-29 | Two tutors sign up themselves; the redirect race drops their names |
+| 2026-11-06 | Music subject and Music Lead added; sign-up race, zero-class board and lead console fixed; e2e sign-up test added |

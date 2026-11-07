@@ -7,7 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="catalog.js"></script>
+    <script src="catalog.js?v=2026-11-music"></script>
     <style>
       :root {
         --bg: #f7f7fb;
@@ -812,59 +812,69 @@
           await loadHours(user);
 
           // ========== OPEN REQUESTS ==========
-          const snap = await getDocs(collection(db, "Requests"));
-          loadingEl.classList.add("hidden");
-
-          if (snap.empty) {
+          // Approval is the gate: an account with no approved classes (e.g. a
+          // brand-new sign-up) sees no requests. Previously an empty class
+          // list matched every request.
+          const approvedClasses = Array.isArray(profile.classes) ? profile.classes : [];
+          const showEmpty = (html) => {
             const none = document.createElement("div");
             none.id = "empty";
-            none.textContent = "No open requests.";
+            none.innerHTML = html;
             listEl.appendChild(none);
-            return;
-          }
+          };
 
-          let renderedCount = 0;
+          if (approvedClasses.length === 0) {
+            loadingEl.classList.add("hidden");
+            showEmpty(
+              "You don't have any approved classes yet. Go to <a href=\"account.html\">My Account</a> " +
+              "to request the classes or instruments you tutor and set your availability. " +
+              "Requests will show up here once a class is approved."
+            );
+          } else {
+            const snap = await getDocs(collection(db, "Requests"));
+            loadingEl.classList.add("hidden");
 
-          snap.forEach((d) => {
-            const data = d.data() || {};
+            let renderedCount = 0;
 
-            // normalize request slots
-            let slots = [];
-            if (Array.isArray(data.availability)) {
-              slots = data.availability;
-            } else if (
-              data.availability &&
-              typeof data.availability === "object"
-            ) {
-              slots = Object.values(data.availability);
-            }
+            snap.forEach((d) => {
+              const data = d.data() || {};
 
-            // filter by availability match
-            const today = todayStart();
+              // normalize request slots
+              let slots = [];
+              if (Array.isArray(data.availability)) {
+                slots = data.availability;
+              } else if (
+                data.availability &&
+                typeof data.availability === "object"
+              ) {
+                slots = Object.values(data.availability);
+              }
 
-            const matchingSlots = slots.filter((s) => {
-              const key = slotKey(s);
-              const d = toDate(s?.date);
-              return key && myAvailSet.has(key) && d && d >= today; // availability AND not in the past
+              // filter by availability match
+              const today = todayStart();
+
+              const matchingSlots = slots.filter((s) => {
+                const key = slotKey(s);
+                const d = toDate(s?.date);
+                return key && myAvailSet.has(key) && d && d >= today; // availability AND not in the past
+              });
+
+              // filter by teachable class/subject
+              const teachOK = isTeachable(data, teachSet);
+
+              // render only if BOTH conditions pass
+              if (matchingSlots.length > 0 && teachOK) {
+                const banner = renderRequest(d.id, data, user, matchingSlots);
+                listEl.appendChild(banner);
+                renderedCount++;
+              }
             });
 
-            // filter by teachable class/subject
-            const teachOK = isTeachable(data, teachSet);
-
-            // render only if BOTH conditions pass
-            if (matchingSlots.length > 0 && teachOK) {
-              const banner = renderRequest(d.id, data, user, matchingSlots);
-              listEl.appendChild(banner);
-              renderedCount++;
+            if (snap.empty) {
+              showEmpty("No open requests.");
+            } else if (renderedCount === 0) {
+              showEmpty("No open requests that match your availability and classes to teach.");
             }
-          });
-
-          if (renderedCount === 0) {
-            const none = document.createElement("div");
-            none.id = "empty";
-            none.textContent =
-              "No open requests that match your availability and classes to teach.";
-            listEl.appendChild(none);
           }
 
           // ========== LEAD / HEAD PANELS ==========

@@ -7,7 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script src="common-auth.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="catalog.js"></script>
+    <script src="catalog.js?v=2026-11-music"></script>
     <style>
       * {
         box-sizing: border-box;
@@ -320,13 +320,7 @@
         </select>
         <select id="subject">
           <option selected value="" disabled>↓ Select a subject</option>
-          <option value="Math">Math</option>
-          <option value="Science">Science</option>
-          <option value="English">English</option>
-          <option value="History">History</option>
-          <option value="World Language">World Language</option>
-          <option value="Computer Science">Computer Science</option>
-          <option value="Other">Other</option>
+          <!-- filled from catalog.js -->
         </select>
         <select id="class">
           <option value="" disabled selected>
@@ -427,7 +421,16 @@
       const CATALOG = window.__CATALOG__;
       const subjectChoice = document.getElementById("subject");
       const classSelect = document.getElementById("class");
+      const locationInput = document.getElementById("location");
+      Object.keys(CATALOG.subjects).forEach((s) => {
+        const o = document.createElement("option");
+        o.value = s;
+        o.textContent = s;
+        subjectChoice.appendChild(o);
+      });
       subjectChoice.addEventListener("change", () => {
+        locationInput.placeholder =
+          `Location (Leave blank for ${CATALOG.defaultLocation(subjectChoice.value)}, "Virtual" for Zoom)`;
         const list = CATALOG.subjects[subjectChoice.value] || [];
         classSelect.innerHTML =
           '<option value="" disabled selected>↓ Select a class</option>';
@@ -712,7 +715,7 @@
           const classSelection = document.getElementById("class").value;
           const topic = document.getElementById("topic").value.trim();
           let location = document.getElementById("location").value.trim();
-          if (!location) location = "Learning Center";
+          if (!location) location = CATALOG.defaultLocation(subject);
           const info = document.getElementById("info").value.trim();
 
           const errors = [];

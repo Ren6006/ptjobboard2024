@@ -103,6 +103,29 @@
       "Design and Data Structures",
       "Other",
     ],
+    // No "Other" here on purpose: class names are the matching key across all
+    // subjects, so a Music "Other" would collide with every other "Other".
+    Music: [
+      "Piano",
+      "Voice",
+      "Violin",
+      "Viola",
+      "Cello",
+      "Upright Bass",
+      "Guitar",
+      "Bass Guitar",
+      "Flute",
+      "Oboe",
+      "Clarinet",
+      "Saxophone",
+      "Trumpet",
+      "Tuba",
+      "Drums",
+      "Music Theory",
+      "Music History",
+      "Composition",
+      "Musicianship",
+    ],
     Other: ["Other"],
   };
 
@@ -156,5 +179,18 @@
     return null;
   }
 
-  global.__CATALOG__ = { subjects, blocks, dayBlocks, roles, subjectOfClass };
+  // Where a request is held when the student leaves Location blank
+  const defaultLocations = { Music: "Music Rooms (1st floor Chalmers)" };
+  function defaultLocation(subject) {
+    return defaultLocations[subject] || "Learning Center";
+  }
+
+  global.__CATALOG__ = {
+    subjects,
+    blocks,
+    dayBlocks,
+    roles,
+    subjectOfClass,
+    defaultLocation,
+  };
 })(window);

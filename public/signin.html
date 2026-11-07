@@ -225,6 +225,13 @@
               // Re-fetch to get the updated role
               doc = await db.collection("users").doc(cred.user.uid).get();
             }
+            // Backfill a missing profile name from the sign-up display name
+            if (!doc.data().name && cred.user.displayName) {
+              await db
+                .collection("users")
+                .doc(cred.user.uid)
+                .set({ name: cred.user.displayName }, { merge: true });
+            }
             // Check role if trying to go to admin
             const destination = next || "board.html";
             if (destination === 'admin.html') {

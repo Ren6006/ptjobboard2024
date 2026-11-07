@@ -2,15 +2,19 @@
 
 ## What exists
 
-`tests/password-reset.test.mjs` — contract tests for the deployed `sendPasswordReset` callable.
-Node's built-in test runner, no dependencies, no `package.json` required.
+| File | Covers | Runs against |
+| --- | --- | --- |
+| `tests/password-reset.test.mjs` | The deployed `sendPasswordReset` callable | **Production** |
+| `tests/signup-flow.test.mjs` | Tutor sign-up → class request → lead approval → board, in a real headless Chrome | **Local emulators only** |
 
-**That is the only automated test in this repo.** Everything else has been verified by hand.
+Both use Node's built-in test runner, no dependencies, no `package.json` required. Everything
+else has been verified by hand.
 
-## Running it
+## Running them
 
 ```powershell
 node --test tests/password-reset.test.mjs
+firebase emulators:exec --only auth,firestore --project ptjobboard2024 "node --test tests/signup-flow.test.mjs"
 ```
 
 Name the file. `node --test tests/` does not resolve on Node 22 here.
@@ -35,7 +39,34 @@ $env:RESET_TEST_REAL_EMAIL="you@hwemail.com"; node --test tests/password-reset.t
 
 All seven passed on 2026-09-20.
 
-## Why these run against production
+## The sign-up flow test
+
+`signup-flow.test.mjs` copies `public/` to a temp folder, points that copy at the Auth and
+Firestore emulators (which load the repo's `firestore.rules`), serves it, and drives headless
+Chrome over the DevTools protocol. It needs Chrome installed (`CHROME_PATH` to override) and
+touches nothing in production. Seven checks:
+
+| Check | Guards |
+| --- | --- |
+| Sign-up writes name, email, role, `created_at`; lands on `account.html?new=1` | **The redirect race** (below) |
+| No approved classes → board shows "request your classes", no requests | Approval is the gate |
+| Account page lists the 19 Music instruments; requesting one makes a pending `ClassRequest` | Catalog + create rule |
+| A `Music Lead` sees it in the Lead Console and approves it | Lead read/update rules |
+| Once the class is granted, the tutor's board shows the matching request | Matching by class + block |
+| `signin.html` backfills a missing name from the Auth display name | Repair for damaged profiles |
+| `request.html` offers Music, Chalmers default location, 19 instruments | Catalog-driven form |
+
+The grant on approval is done by the `onClassRequestApproved` function in production; the test
+simulates it, because functions (and email) are not emulated. All seven passed on 2026-11-06.
+
+**The redirect race.** Until 2026-11-06 `signup.html` redirected from `onAuthStateChanged`, which
+fires the moment the account is created, so the page navigated away before the profile write
+finished and the browser cancelled it. Both tutors who signed up themselves that fall ended up
+with a profile that held no name and no `created_at` (written later by `signin.html`). A fast
+local emulator may not reproduce the race, so the first check proves the write and the
+redirect target, not the timing.
+
+## Why the reset tests run against production
 
 They hit the **deployed** function, not an emulator, and that is deliberate. The bug they guard
 against only appears against real Identity Toolkit: an unknown address comes back as HTTP 200
@@ -56,13 +87,14 @@ assertion. Background in [EMAIL.md](EMAIL.md#the-ooblink-gotcha).
 
 ## What has no coverage
 
-- **Firestore security rules.** Nothing. This matters: a privilege-escalation bug was found in
+- **Firestore security rules, beyond the paths the sign-up flow walks.** No negative tests (for
+  example, a lead reading another subject's requests, or a user granting themselves classes). This matters: a privilege-escalation bug was found in
   these rules during the 2026-09 review, where any signed-in user could grant themselves an admin
   role or approve their own classes. A rules suite using `@firebase/rules-unit-testing` against
   the emulator is the single highest-value test to add.
 - **The five other email functions.** No automated coverage. Note the blast radius warning in
   [EMAIL.md](EMAIL.md#who-sends-mail) before testing `onTutoringRequestCreated` with real data.
-- **Every page in `public/`.** No automated coverage.
+- **The pages in `public/`** outside the sign-up flow above (admin console, sessions, hours).
 
 ## A caution about this file
 

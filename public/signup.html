@@ -84,7 +84,7 @@
   </head>
   <body>
     <div class="box">
-      <h1>Create your student account</h1>
+      <h1>Create your tutor account</h1>
       <p class="helper">
         Use your school email ending with <strong>@hwemail.com</strong> or <strong>@hw.com</strong>.
       </p>
@@ -127,9 +127,15 @@
       // Persistent login across refreshes
       auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
 
-      // If already signed in, send to request form
+      // Set while the form is creating an account. Creating the account signs
+      // the user in, which fires onAuthStateChanged immediately; redirecting
+      // from there navigates away before the profile write below finishes and
+      // the browser cancels it (accounts ended up with no name or created_at).
+      let signingUp = false;
+
+      // If already signed in, go to the board
       auth.onAuthStateChanged((user) => {
-        if (user) {
+        if (user && !signingUp) {
           window.location.href = "board.html";
         }
       });
@@ -157,6 +163,7 @@
           errorBox.textContent = "Please enter your full name.";
           return;
         }
+        signingUp = true;
         try {
           const cred = await auth.createUserWithEmailAndPassword(
             email,
@@ -172,8 +179,11 @@
             },
             { merge: true }
           );
-          window.location.href = "board.html";
+          // New tutors have no approved classes yet: send them to pick their
+          // classes and set availability.
+          window.location.href = "account.html?new=1";
         } catch (err) {
+          signingUp = false;
           // If account exists, try sign in to avoid duplicate flow
           if (err && err.code === "auth/email-already-in-use") {
             try {
